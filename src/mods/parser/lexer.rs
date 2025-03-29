@@ -36,7 +36,7 @@ pub enum Token {
     False,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum TknError { UnrecognizedToken, Eof }
 
 use Token::*;
