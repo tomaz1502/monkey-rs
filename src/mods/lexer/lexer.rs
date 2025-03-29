@@ -73,13 +73,13 @@ impl Tokenizer {
     }
 
     pub fn get_next(&mut self) -> Result<Token, TknError> {
-        while self.ptr < self.input.len() && Tokenizer::is_space(self.input[self.ptr]) {
+        while self.ptr < self.input.len() && Self::is_space(self.input[self.ptr]) {
             self.ptr += 1;
         }
         if self.ptr == self.input.len() {
             return Err(Eof);
         }
-        if let Some(tk) = Tokenizer::get_delimiter(self.input[self.ptr]) {
+        if let Some(tk) = Self::get_delimiter(self.input[self.ptr]) {
             self.ptr += 1;
             return Ok(tk);
         }
@@ -90,20 +90,12 @@ impl Tokenizer {
             self.ptr += 1;
         }
         match token.as_str() {
-            "("   => Ok(LPar),
-            ")"   => Ok(RPar),
-            "{"   => Ok(LBrack),
-            "}"   => Ok(RBrack),
-            ";"   => Ok(Semicolon),
-            ","   => Ok(Comma),
             "let" => Ok(Let),
             "fn"  => Ok(Fn),
-            "="   => Ok(Equals),
-            "+"   => Ok(Plus),
             _     => {
-                if Tokenizer::is_valid_id(&token) {
+                if Self::is_valid_id(&token) {
                     Ok(Id(token))
-                } else if Tokenizer::is_integer(&token) {
+                } else if Self::is_integer(&token) {
                     match token.parse::<i64>() {
                         Ok(num) => Ok(Integer(num)),
                         _ => { unreachable!() } // It was already checked that every char in token
