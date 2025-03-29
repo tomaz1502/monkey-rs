@@ -11,7 +11,7 @@ mod mods;
 fn die(msg: &str) -> ()
 {
     println!("{}", msg);
-    process::exit(1);
+    process::exit(1)
 }
 
 fn get_text(file_path: &str) -> io::Result<String>

@@ -1,3 +1,5 @@
+use std::ops::Fn;
+
 #[derive(PartialEq, Debug)]
 pub enum Token {
     // Identifiers and literals
@@ -12,13 +14,26 @@ pub enum Token {
     Semicolon,
     Comma,
 
+    // Operators (also delimiters)
+    Plus,
+    Assign,
+    Minus,
+    Bang,
+    Mult,
+    Slash,
+    LT,
+    GT,
+    Eq,
+    Neq,
+
     // Keywords
     Let,
     Fn,
-
-    // Operators
-    Plus,
-    Equals,
+    Return,
+    If,
+    Else,
+    True,
+    False,
 }
 
 #[derive(PartialEq)]
@@ -33,78 +48,106 @@ pub struct Tokenizer {
 }
 
 impl Tokenizer {
-    pub fn new(input: String) -> Self {
+    pub fn new(input: String) -> Self
+    {
         Tokenizer { input: input.as_bytes().to_vec(), ptr: 0 }
     }
 
-    fn is_space(byt: u8) -> bool {
+    fn is_space(byt: u8) -> bool
+    {
         return byt == b' ' || byt == b'\n' || byt == b'\t';
     }
 
-    fn get_delimiter(byt: u8) -> Option<Token> {
-        match byt {
-            b';' => Some(Semicolon),
-            b',' => Some(Comma),
-            b'(' => Some(LPar),
-            b')' => Some(RPar),
-            b'{' => Some(LBrack),
-            b'}' => Some(RBrack),
-            b'+' => Some(Plus),
-            b'=' => Some(Equals),
-            _ => None
+    fn peek(&self) -> Option<char> {
+        if self.ptr == self.input.len() {
+            None
+        } else {
+            Some(self.input[self.ptr] as char)
+        }
+    }
+    fn read_char(&mut self) -> Option<char> {
+        if self.ptr == self.input.len() {
+            None
+        } else {
+            let ch = self.input[self.ptr] as char;
+            self.ptr += 1;
+            Some(ch)
         }
     }
 
-    fn should_stop_lexing(byt: u8) -> bool {
-        Option::is_some(&Self::get_delimiter(byt)) || Self::is_space(byt)
+    fn read_while<F>(&mut self, pred: F) -> String
+        where F: Fn(u8) -> bool
+    {
+        let mut tok = String::from("");
+        while self.ptr < self.input.len() && pred(self.input[self.ptr]) {
+            tok.push(self.input[self.ptr] as char);
+            self.ptr += 1;
+        }
+        tok
     }
 
-    fn is_valid_id(token: &String) -> bool {
-        let bytes = token.as_bytes();
-        let first_char = bytes[0] as char;
-        first_char.is_alphabetic() || first_char == '_'
-    }
-
-    fn is_integer(token: &String) -> bool {
-        let mut it = token.chars().into_iter();
-        let first_char = it.next().unwrap();
-        let b = it.all(|c| { c.is_numeric() });
-        b && (first_char.is_numeric() || first_char == '-')
-    }
-
-    pub fn get_next(&mut self) -> Result<Token, TknError> {
+    pub fn get_next(&mut self) -> Result<Token, TknError>
+    {
         while self.ptr < self.input.len() && Self::is_space(self.input[self.ptr]) {
             self.ptr += 1;
         }
         if self.ptr == self.input.len() {
             return Err(Eof);
         }
-        if let Some(tk) = Self::get_delimiter(self.input[self.ptr]) {
-            self.ptr += 1;
-            return Ok(tk);
-        }
-        let mut token: String = String::from(self.input[self.ptr] as char);
-        self.ptr += 1;
-        while self.ptr < self.input.len() && !Self::should_stop_lexing(self.input[self.ptr]) {
-            token.push(self.input[self.ptr] as char);
-            self.ptr += 1;
-        }
-        match token.as_str() {
-            "let" => Ok(Let),
-            "fn"  => Ok(Fn),
-            _     => {
-                if Self::is_valid_id(&token) {
-                    Ok(Id(token))
-                } else if Self::is_integer(&token) {
-                    match token.parse::<i64>() {
-                        Ok(num) => Ok(Integer(num)),
-                        _ => { unreachable!() } // It was already checked that every char in token
-                                                // is a number
-                    }
+
+        let ch = self.read_char().unwrap();
+        match ch {
+            ';' => Ok(Semicolon),
+            ',' => Ok(Comma),
+            '(' => Ok(LPar),
+            ')' => Ok(RPar),
+            '{' => Ok(LBrack),
+            '}' => Ok(RBrack),
+            '+' => Ok(Plus),
+            '=' => {
+                if self.peek() == Some('=') {
+                    self.read_char();
+                    Ok(Eq)
                 } else {
-                    Err(UnrecognizedToken)
+                    Ok(Assign)
                 }
             }
+            '-' => Ok(Minus),
+            '*' => Ok(Mult),
+            '<' => Ok(LT),
+            '>' => Ok(GT),
+            '!' => {
+                if self.peek() == Some('=') {
+                    self.read_char();
+                    Ok(Neq)
+                } else {
+                    Ok(Bang)
+                }
+            },
+            '/' => Ok(Slash),
+            'a'..='z' | 'A'..='Z' | '_' => {
+                let rest = self.read_while(|b| { b.is_ascii_alphanumeric() || b == b'_' });
+                let word = String::from(ch) + &rest;
+                match word.as_str() {
+                    "let"    => Ok(Let),
+                    "fn"     => Ok(Fn),
+                    "true"   => Ok(True),
+                    "false"  => Ok(False),
+                    "return" => Ok(Return),
+                    "if"     => Ok(If),
+                    "else"   => Ok(Else),
+                    _        => Ok(Id(word))
+                }
+            }
+            '1'..='9' => {
+                let rest = self.read_while(|b| { (b as char).is_numeric() });
+                let num_str = String::from(ch) + &rest;
+                match num_str.parse::<i64>() {
+                    Ok(num) => Ok(Integer(num)),
+                    Err(_) => Err(UnrecognizedToken) // TODO: Create a token error for this
+                }
+            }
+            _ => Err(UnrecognizedToken),
         }
     }
 }
@@ -114,13 +157,15 @@ mod tests {
     use crate::lexer::Tokenizer;
     use crate::lexer::Token::*;
     use crate::lexer::TknError::*;
+
     #[test]
-    fn tokenize_simple_program() {
+    fn tokenize_simple_program()
+    {
         let program = "
             let five = 5;
             let ten = 10;
             let add = fn(x, y) {
-                x + y;
+                x + y * 3;
             };
             let result = add(five, ten);";
         let mut tkn = Tokenizer::new(program.to_string());
@@ -132,13 +177,14 @@ mod tests {
                 Err(_) => { panic!("Unexpected error in tokenizer"); }
             }
         }
+        println!("{:?}", tokens);
         assert!(tokens ==
-          [Let, Id("five".to_string()), Equals, Integer(5), Semicolon, Let,
-           Id("ten".to_string()), Equals, Integer(10), Semicolon, Let,
-           Id("add".to_string()), Equals, Fn, LPar, Id("x".to_string()),
+          [Let, Id("five".to_string()), Assign, Integer(5), Semicolon, Let,
+           Id("ten".to_string()), Assign, Integer(10), Semicolon, Let,
+           Id("add".to_string()), Assign, Fn, LPar, Id("x".to_string()),
            Comma, Id("y".to_string()), RPar, LBrack, Id("x".to_string()), Plus,
-           Id("y".to_string()), Semicolon, RBrack, Semicolon, Let,
-           Id("result".to_string()), Equals, Id("add".to_string()),
+           Id("y".to_string()), Mult, Integer(3), Semicolon, RBrack, Semicolon, Let,
+           Id("result".to_string()), Assign, Id("add".to_string()),
            LPar, Id("five".to_string()), Comma, Id("ten".to_string()),
            RPar, Semicolon
           ]);
