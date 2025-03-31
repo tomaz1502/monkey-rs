@@ -1,10 +1,9 @@
-use std::fs;
-use std::io::Write;
-use std::path::Path;
 use std::env;
+use std::fs;
 use std::io;
-use std::io::BufRead;
+use std::path::Path;
 use std::process;
+use io::{Write, BufRead};
 
 use mods::parser::lexer;
 
@@ -33,12 +32,12 @@ fn repl() -> io::Result<()>
         print!(">> ");
         io::stdout().flush()?;
         let line = stdin.lock().lines().next().unwrap().unwrap();
-        let mut tokenizer = lexer::Tokenizer::new(line);
+        let mut tokenizer = lexer::Lexer::new(line);
         loop {
-            let tkn = tokenizer.get_next();
+            let tkn = tokenizer.get_next_token();
             match tkn {
+                Ok(lexer::Token::Eof) => break,
                 Ok(tkn) => println!("{:?}", tkn),
-                Err(lexer::TknError::Eof) => break,
                 Err(e) => panic!("unexpected error: {:?}", e)
             }
         }
@@ -51,10 +50,10 @@ fn main() -> io::Result<()>
     if args.len() > 2 {
         die("Usage: monkey <program path> or just monkey");
     }
-    if args.len() == 2 {
+    else if args.len() == 2 {
         let text = get_text(&args[1])?;
-        let mut tokenizer = lexer::Tokenizer::new(text);
-        let _tkn = tokenizer.get_next();
+        let mut tokenizer = lexer::Lexer::new(text);
+        let _tkn = tokenizer.get_next_token();
     } else {
         repl()?;
     }

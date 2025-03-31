@@ -1,6 +1,7 @@
-use std::ops::Fn;
+use std::hash::Hasher;
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
+#[repr(u8)]
 pub enum Token {
     // Identifiers and literals
     Id(String),
@@ -34,23 +35,50 @@ pub enum Token {
     Else,
     True,
     False,
+
+    // EOF
+    Eof
+}
+
+impl Token {
+    fn discriminant(&self) -> u8
+    {
+        unsafe { *<*const _>::from(self).cast::<u8>() }
+    }
+}
+
+// we can't derive because we need Id(_) = Id(_) and Integer(_) = Integer(_) for the hashmap
+impl PartialEq for Token {
+    fn eq(&self, other: &Token) -> bool
+    {
+        self.discriminant() == other.discriminant()
+    }
+}
+
+impl std::cmp::Eq for Token {}
+
+impl std::hash::Hash for Token {
+    fn hash<H: Hasher>(&self, state: &mut H)
+    {
+        state.write_u8(self.discriminant());
+    }
 }
 
 #[derive(PartialEq, Debug)]
-pub enum TknError { UnrecognizedToken, Eof }
+pub enum LexError { UnrecognizedToken }
 
 use Token::*;
-use TknError::*;
+use LexError::*;
 
-pub struct Tokenizer {
+pub struct Lexer {
     input: Vec<u8>,
     ptr: usize
 }
 
-impl Tokenizer {
+impl Lexer {
     pub fn new(input: String) -> Self
     {
-        Tokenizer { input: input.as_bytes().to_vec(), ptr: 0 }
+        Lexer { input: input.as_bytes().to_vec(), ptr: 0 }
     }
 
     fn is_space(byt: u8) -> bool
@@ -58,44 +86,43 @@ impl Tokenizer {
         return byt == b' ' || byt == b'\n' || byt == b'\t';
     }
 
-    fn peek(&self) -> Option<char> {
-        if self.ptr == self.input.len() {
+    fn peek(input: &Vec<u8>, ptr: &usize) -> Option<char> {
+        if *ptr == input.len() {
             None
         } else {
-            Some(self.input[self.ptr] as char)
+            Some(input[*ptr] as char)
         }
     }
-    fn read_char(&mut self) -> Option<char> {
-        if self.ptr == self.input.len() {
+    fn read_char(input: &Vec<u8>, ptr: &mut usize) -> Option<char> {
+        if *ptr == input.len() {
             None
         } else {
-            let ch = self.input[self.ptr] as char;
-            self.ptr += 1;
+            let ch = input[*ptr] as char;
+            *ptr += 1;
             Some(ch)
         }
     }
 
-    fn read_while<F>(&mut self, pred: F) -> String
-        where F: Fn(u8) -> bool
+    fn read_while(input: &Vec<u8>, ptr: &mut usize, pred: fn(u8) -> bool) -> String
     {
         let mut tok = String::from("");
-        while self.ptr < self.input.len() && pred(self.input[self.ptr]) {
-            tok.push(self.input[self.ptr] as char);
-            self.ptr += 1;
+        while *ptr < input.len() && pred(input[*ptr]) {
+            tok.push(input[*ptr] as char);
+            *ptr += 1;
         }
         tok
     }
 
-    pub fn get_next(&mut self) -> Result<Token, TknError>
+    fn get_next_aux(input: &Vec<u8>, ptr: &mut usize) -> Result<Token, LexError>
     {
-        while self.ptr < self.input.len() && Self::is_space(self.input[self.ptr]) {
-            self.ptr += 1;
+        while *ptr < input.len() && Self::is_space(input[*ptr]) {
+            *ptr += 1;
         }
-        if self.ptr == self.input.len() {
-            return Err(Eof);
+        if *ptr == input.len() {
+            return Ok(Eof);
         }
 
-        let ch = self.read_char().unwrap();
+        let ch = Self::read_char(input, ptr).unwrap();
         match ch {
             ';' => Ok(Semicolon),
             ',' => Ok(Comma),
@@ -105,8 +132,8 @@ impl Tokenizer {
             '}' => Ok(RBrack),
             '+' => Ok(Plus),
             '=' => {
-                if self.peek() == Some('=') {
-                    self.read_char();
+                if Self::peek(input, ptr) == Some('=') {
+                    Self::read_char(input, ptr);
                     Ok(Eq)
                 } else {
                     Ok(Assign)
@@ -117,8 +144,8 @@ impl Tokenizer {
             '<' => Ok(LT),
             '>' => Ok(GT),
             '!' => {
-                if self.peek() == Some('=') {
-                    self.read_char();
+                if Self::peek(input, ptr) == Some('=') {
+                    Self::read_char(input, ptr);
                     Ok(Neq)
                 } else {
                     Ok(Bang)
@@ -126,7 +153,7 @@ impl Tokenizer {
             },
             '/' => Ok(Slash),
             'a'..='z' | 'A'..='Z' | '_' => {
-                let rest = self.read_while(|b| { b.is_ascii_alphanumeric() || b == b'_' });
+                let rest = Self::read_while(input, ptr, |b: u8| { b.is_ascii_alphanumeric() || b == b'_' });
                 let word = String::from(ch) + &rest;
                 match word.as_str() {
                     "let"    => Ok(Let),
@@ -140,7 +167,7 @@ impl Tokenizer {
                 }
             }
             '1'..='9' => {
-                let rest = self.read_while(|b| { (b as char).is_numeric() });
+                let rest = Self::read_while(input, ptr, |b| { (b as char).is_numeric() });
                 let num_str = String::from(ch) + &rest;
                 match num_str.parse::<i64>() {
                     Ok(num) => Ok(Integer(num)),
@@ -150,13 +177,24 @@ impl Tokenizer {
             _ => Err(UnrecognizedToken),
         }
     }
+
+    pub fn get_next_token(&mut self) -> Result<Token, LexError>
+    {
+        Self::get_next_aux(&self.input, &mut self.ptr)
+    }
+
+    pub fn peek_token(&self) -> Result<Token, LexError>
+    {
+        let mut p = self.ptr;
+        Self::get_next_aux(&self.input, &mut p)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::lexer::Tokenizer;
-    use crate::lexer::Token::*;
-    use crate::lexer::TknError::*;
+    use super::Lexer;
+    use super::Token::*;
+    use super::LexError::*;
 
     #[test]
     fn tokenize_simple_program()
@@ -168,13 +206,13 @@ mod tests {
                 x + y * 3;
             };
             let result = add(five, ten);";
-        let mut tkn = Tokenizer::new(program.to_string());
+        let mut tkn = Lexer::new(program.to_string());
         let mut tokens = vec![];
         loop {
-            match tkn.get_next() {
-                Ok(tk) => { tokens.push(tk); }
-                Err(Eof) => { break; }
-                Err(_) => { panic!("Unexpected error in tokenizer"); }
+            match tkn.get_next_token() {
+                Ok(Eof) => { break; }
+                Ok(tk)  => { tokens.push(tk); }
+                Err(UnrecognizedToken) => { panic!("Unexpected error in tokenizer"); }
             }
         }
         println!("{:?}", tokens);
