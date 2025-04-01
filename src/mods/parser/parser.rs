@@ -17,7 +17,7 @@ enum Precedence {
 }
 
 impl Precedence {
-    fn token_precedence(tk: lexer::Token) -> Self
+    fn token_precedence(tk: &lexer::Token) -> Self
     {
         match tk {
             Eq    => Precedence::EQUALS,
@@ -35,15 +35,51 @@ impl Precedence {
 
 type Id = String;
 
-#[derive(PartialEq)]
+enum ParseError { UnrecognizedToken, UnexpectedToken, TokenWithoutPrefixFn, TokenWithoutInfixFn }
+
+#[derive(PartialEq, Debug)]
+enum PrefixOperator { Minus, Bang }
+
+impl PrefixOperator {
+    fn from_tok(tok: &lexer::Token) -> Result<Self, ParseError>
+    {
+        match tok {
+            lexer::Token::Bang => Ok(PrefixOperator::Bang),
+            lexer::Token::Minus => Ok(PrefixOperator::Minus),
+            _ => Err(ParseError::UnexpectedToken) // TODO: Should we have another parse error here?
+        }
+    }
+}
+
+#[derive(PartialEq, Debug)]
+enum InfixOperator { Plus, Minus, Mult, Slash, Eq, Neq, LT, GT }
+
+impl InfixOperator {
+    fn from_tok(tok: &lexer::Token) -> Result<Self, ParseError>
+    {
+        match tok {
+            lexer::Token::Plus => Ok(InfixOperator::Plus),
+            lexer::Token::Minus => Ok(InfixOperator::Minus),
+            lexer::Token::Mult => Ok(InfixOperator::Mult),
+            lexer::Token::Slash => Ok(InfixOperator::Slash),
+            lexer::Token::LT => Ok(InfixOperator::LT),
+            lexer::Token::GT => Ok(InfixOperator::GT),
+            lexer::Token::Eq => Ok(InfixOperator::Eq),
+            lexer::Token::Neq => Ok(InfixOperator::Neq),
+            _ => Err(ParseError::UnexpectedToken) // TODO: Should we have another parse error here?
+        }
+    }
+}
+
+#[derive(PartialEq, Debug)]
 enum Expr {
     Ident(Id),
     Integer(i64),
-    PrefixExpr(Box<Expr>),
-    InfixExpr(Box<Expr>, Box<Expr>)
+    PrefixExpr(PrefixOperator, Box<Expr>),
+    InfixExpr(InfixOperator, Box<Expr>, Box<Expr>)
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum Stmt {
     LetStmt(Id, Expr),
     ReturnStmt(Expr),
@@ -54,46 +90,85 @@ struct Program {
     stmts: Vec<Stmt>
 }
 
-enum ParseError { UnrecognizedToken, UnexpectedToken }
+impl From<LexError> for ParseError {
+    fn from(err: LexError) -> Self
+    {
+        match err {
+            LexError::UnrecognizedToken => ParseError::UnrecognizedToken
+        }
+    }
+}
+
+type PrefixCont = for<'a> fn (&'a mut Parser) -> Result<Expr, ParseError>;
+type InfixCont = for<'a> fn (&'a mut Parser, Expr) -> Result<Expr, ParseError>;
 
 struct Parser {
     curr_token: lexer::Token,
     lexer: lexer::Lexer,
 
-    prefix_parse_fn: HashMap<lexer::Token, for<'a> fn(&'a Parser) -> Result<Expr, ParseError>>,
-    infix_parse_fn: HashMap<lexer::Token, for<'a> fn(&'a Parser, Expr) -> Result<Expr, ParseError>>,
+    prefix_parse_fn: HashMap<lexer::Token, PrefixCont>,
+    infix_parse_fn: HashMap<lexer::Token, InfixCont>,
 }
 
 impl Parser {
     fn new(source_code: String) -> Result<Self, ParseError> {
         let mut lexer = lexer::Lexer::new(source_code);
-        match lexer.get_next_token() {
-            Ok(curr_token) => {
-                Ok(Parser { curr_token, lexer, prefix_parse_fn: HashMap::new(), infix_parse_fn: HashMap::new() })
-            }
-            Err(LexError::UnrecognizedToken) => Err(ParseError::UnrecognizedToken)
-        }
-    }
-
-    fn initialize(source_code: String) -> Result<Self, ParseError>
-    {
-        let mut parser = Self::new(source_code)?;
+        let curr_token = lexer.get_next_token()?;
+        let mut parser =
+            Parser { curr_token, lexer, prefix_parse_fn: HashMap::new(), infix_parse_fn: HashMap::new() };
         parser.register_prefix_fn(lexer::Token::Id("".to_string()), Self::parse_id_to_expr);
         parser.register_prefix_fn(lexer::Token::Integer(42), Self::parse_integer_to_expr);
+        parser.register_prefix_fn(lexer::Token::Bang, Self::parse_prefix_expr);
+        parser.register_prefix_fn(lexer::Token::Minus, Self::parse_prefix_expr);
+        parser.register_infix_fn(lexer::Token::Plus, Self::parse_infix_expr);
+        parser.register_infix_fn(lexer::Token::Minus, Self::parse_infix_expr);
+        parser.register_infix_fn(lexer::Token::Mult, Self::parse_infix_expr);
+        parser.register_infix_fn(lexer::Token::Slash, Self::parse_infix_expr);
+        parser.register_infix_fn(lexer::Token::LT, Self::parse_infix_expr);
+        parser.register_infix_fn(lexer::Token::GT, Self::parse_infix_expr);
+        parser.register_infix_fn(lexer::Token::Eq, Self::parse_infix_expr);
+        parser.register_infix_fn(lexer::Token::Neq, Self::parse_infix_expr);
         Ok(parser)
     }
 
-    fn register_prefix_fn(&mut self, t: lexer::Token, f: for<'a> fn(&'a Parser) -> Result<Expr, ParseError>) -> ()
+    fn register_prefix_fn(&mut self, t: lexer::Token, f: PrefixCont) -> ()
     {
         self.prefix_parse_fn.insert(t, f);
     }
 
-    fn register_infix_fn(&mut self, t: lexer::Token, f: for<'a> fn(&'a Parser, Expr) -> Result<Expr, ParseError>) -> ()
+    fn get_prefix_fn(&self) -> Result<PrefixCont, ParseError>
+    {
+        self.prefix_parse_fn.get(&self.curr_token).ok_or(ParseError::TokenWithoutPrefixFn).map(|x| { *x })
+    }
+
+    fn register_infix_fn(&mut self, t: lexer::Token, f: InfixCont) -> ()
     {
         self.infix_parse_fn.insert(t, f);
     }
 
-    fn parse_integer_to_expr(&self) -> Result<Expr, ParseError>
+    fn get_infix_fn(&self) -> Result<InfixCont, ParseError>
+    {
+        self.infix_parse_fn.get(&self.curr_token).ok_or(ParseError::TokenWithoutInfixFn).map(|x| { *x })
+    }
+
+    fn parse_prefix_expr(&mut self) -> Result<Expr, ParseError>
+    {
+        let op = PrefixOperator::from_tok(&self.curr_token)?;
+        self.advance_token()?;
+        let rhs = self.parse_expr()?;
+        Ok(Expr::PrefixExpr(op, Box::new(rhs)))
+    }
+
+    fn parse_infix_expr(&mut self, lhs: Expr) -> Result<Expr, ParseError>
+    {
+        let op = InfixOperator::from_tok(&self.curr_token)?;
+        let prec = Precedence::token_precedence(&self.curr_token);
+        self.advance_token()?;
+        let rhs = self.parse_expr_prec(prec)?;
+        Ok(Expr::InfixExpr(op, Box::new(lhs), Box::new(rhs)))
+    }
+
+    fn parse_integer_to_expr(&mut self) -> Result<Expr, ParseError>
     {
         match self.curr_token {
             Integer(num) => Ok(Expr::Integer(num)),
@@ -101,7 +176,7 @@ impl Parser {
         }
     }
 
-    fn parse_id_to_expr(&self) -> Result<Expr, ParseError>
+    fn parse_id_to_expr(&mut self) -> Result<Expr, ParseError>
     {
         match &self.curr_token {
             Id(name) => Ok(Expr::Ident(name.clone())),
@@ -111,10 +186,8 @@ impl Parser {
 
     fn advance_token(&mut self) -> Result<(), ParseError>
     {
-        match self.lexer.get_next_token() {
-            Ok(tkn) => { self.curr_token = tkn; Ok(()) }
-            Err(LexError::UnrecognizedToken) => Err(ParseError::UnrecognizedToken)
-        }
+        self.curr_token = self.lexer.get_next_token()?;
+        Ok(())
     }
 
     fn parse_id(&self) -> Result<String, ParseError>
@@ -125,14 +198,33 @@ impl Parser {
         }
     }
 
+    fn parse_expr_prec(&mut self, _prec: Precedence) -> Result<Expr, ParseError>
+    {
+        let prefix_fn = self.get_prefix_fn()?;
+        let left_expr = prefix_fn(self)?;
+
+        // loop {
+            
+        // }
+
+        Ok(left_expr)
+    }
+
     fn parse_expr(&mut self) -> Result<Expr, ParseError>
     {
-        todo!()
+        self.parse_expr_prec(Precedence::LOWEST)
     }
 
     fn parse_expr_stmt(&mut self) -> Result<Stmt, ParseError>
     {
         let expr = self.parse_expr()?;
+
+        self.advance_token()?;
+        match self.curr_token {
+            Semicolon => self.advance_token()?,
+            _ => ()
+        }
+
         Ok(Stmt::ExprStmt(expr))
     }
 
@@ -199,7 +291,7 @@ impl Parser {
     // My solution will be to just expose this
     pub fn parse(source_code: String) -> Result<Program, ParseError>
     {
-        let mut parser = Self::initialize(source_code)?;
+        let mut parser = Self::new(source_code)?;
         parser.parse_program()
     }
 }
@@ -209,6 +301,8 @@ mod tests {
     use super::Parser;
     use super::Stmt;
     use super::Expr;
+    use super::PrefixOperator;
+    use super::InfixOperator;
 
     #[test]
     fn parse_simple_program()
@@ -225,7 +319,67 @@ mod tests {
                     ];
             assert!(prog.stmts == expected);
         } else {
-            panic!("Unrecognized token");
+            panic!("Parser failed");
+        }
+    }
+
+    #[test]
+    fn parse_simple_id()
+    {
+        let source_code = "foobar;";
+        if let Ok(prog) = Parser::parse(source_code.to_string()) {
+            let expected = vec![Stmt::ExprStmt(Expr::Ident("foobar".to_string()))];
+            assert!(prog.stmts == expected);
+        } else {
+            panic!("Parser failed");
+        }
+    }
+
+    #[test]
+    fn parse_prefix_expr_test()
+    {
+        struct TestCase { input: &'static str, op: PrefixOperator, arg: Expr }
+        let cases = [
+            TestCase {input: "!5;", op: PrefixOperator::Bang, arg: Expr::Integer(5)},
+            TestCase {input: "-15;", op: PrefixOperator::Minus, arg: Expr::Integer(15)}
+        ];
+        for case in cases {
+            if let Ok(prog) = Parser::parse(case.input.to_string()) {
+                match &prog.stmts[0] {
+                    Stmt::ExprStmt(Expr::PrefixExpr(op, rhs)) =>
+                        assert!(*op == case.op && **rhs == case.arg),
+                    _ => panic!("Failed: wrong parsing")
+                }
+            } else {
+                panic!("Parser failed");
+            }
+        }
+    }
+
+    #[test]
+    fn parse_infix_expr_test()
+    {
+        struct TestCase { input: &'static str, op: InfixOperator, lhs: Expr, rhs: Expr }
+        let cases = [
+            TestCase {input: "5 + 5;", op: InfixOperator::Plus, lhs: Expr::Integer(5), rhs: Expr::Integer(5)},
+            TestCase {input: "5 - 5;", op: InfixOperator::Minus, lhs: Expr::Integer(5), rhs: Expr::Integer(5)},
+            TestCase {input: "5 * 5;", op: InfixOperator::Mult, lhs: Expr::Integer(5), rhs: Expr::Integer(5)},
+            TestCase {input: "5 / 5;", op: InfixOperator::Slash, lhs: Expr::Integer(5), rhs: Expr::Integer(5)},
+            TestCase {input: "5 < 5;", op: InfixOperator::LT, lhs: Expr::Integer(5), rhs: Expr::Integer(5)},
+            TestCase {input: "5 > 5;", op: InfixOperator::GT, lhs: Expr::Integer(5), rhs: Expr::Integer(5)},
+            TestCase {input: "5 == 5;", op: InfixOperator::Eq, lhs: Expr::Integer(5), rhs: Expr::Integer(5)},
+            TestCase {input: "5 != 5;", op: InfixOperator::Neq, lhs: Expr::Integer(5), rhs: Expr::Integer(5)},
+        ];
+        for case in cases {
+            if let Ok(prog) = Parser::parse(case.input.to_string()) {
+                match &prog.stmts[0] {
+                    Stmt::ExprStmt(Expr::InfixExpr(op, lhs, rhs)) =>
+                        assert!(*op == case.op && **lhs == case.lhs && **rhs == case.rhs),
+                    _ => panic!("Failed: wrong parsing")
+                }
+            } else {
+                panic!("Parser failed");
+            }
         }
     }
 }

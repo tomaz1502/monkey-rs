@@ -1,6 +1,6 @@
 use std::hash::Hasher;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(u8)]
 pub enum Token {
     // Identifiers and literals
