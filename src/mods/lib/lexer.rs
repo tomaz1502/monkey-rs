@@ -93,6 +93,7 @@ impl Lexer {
             Some(input[*ptr] as char)
         }
     }
+
     fn read_char(input: &Vec<u8>, ptr: &mut usize) -> Option<char> {
         if *ptr == input.len() {
             None
@@ -118,11 +119,12 @@ impl Lexer {
         while *ptr < input.len() && Self::is_space(input[*ptr]) {
             *ptr += 1;
         }
-        if *ptr == input.len() {
-            return Ok(Eof);
-        }
 
-        let ch = Self::read_char(input, ptr).unwrap();
+        let ch = match Self::read_char(input, ptr) {
+            None => return Ok(Eof),
+            Some(ch) => ch
+        };
+
         match ch {
             ';' => Ok(Semicolon),
             ',' => Ok(Comma),
@@ -178,6 +180,7 @@ impl Lexer {
         }
     }
 
+    // TODO: Iterator trait?
     pub fn get_next_token(&mut self) -> Result<Token, LexError>
     {
         Self::get_next_aux(&self.input, &mut self.ptr)

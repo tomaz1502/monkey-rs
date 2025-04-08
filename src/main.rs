@@ -5,7 +5,8 @@ use std::path::Path;
 use std::process;
 use io::{Write, BufRead};
 
-use mods::parser::lexer;
+use mods::lib::lexer;
+use mods::lib::parser;
 
 mod mods;
 
@@ -32,14 +33,9 @@ fn repl() -> io::Result<()>
         print!(">> ");
         io::stdout().flush()?;
         let line = stdin.lock().lines().next().unwrap().unwrap();
-        let mut tokenizer = lexer::Lexer::new(line);
-        loop {
-            let tkn = tokenizer.get_next_token();
-            match tkn {
-                Ok(lexer::Token::Eof) => break,
-                Ok(tkn) => println!("{:?}", tkn),
-                Err(e) => panic!("unexpected error: {:?}", e)
-            }
+        match parser::Parser::parse(line) {
+            Ok(prog) => println!("{:?}", prog),
+            Err(_) => todo!(),
         }
     }
 }
