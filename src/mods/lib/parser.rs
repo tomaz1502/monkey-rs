@@ -28,6 +28,7 @@ impl Precedence {
             Minus => Precedence::SUM,
             Mult  => Precedence::PRODUCT,
             Slash => Precedence::PRODUCT,
+            LPar  => Precedence::CALL,
             _     => Precedence::LOWEST
         }
     }
@@ -106,6 +107,8 @@ enum Expr {
     Integer(i64),
     Boolean(bool),
     Ite(Box<Expr>, BlockStmt, Option<BlockStmt>),
+    Lambda(Vec<Id>, BlockStmt),
+    Call(Id, Vec<Expr>),
     PrefixExpr(PrefixOperator, Box<Expr>),
     InfixOp(InfixOperator, Box<Expr>, Box<Expr>)
 }
@@ -121,6 +124,8 @@ impl ToString for Expr {
             Boolean(b) => b.to_string(),
             Ite(cond, t, Some(e)) => format!("if ({}) {{ {} }} else {{ {} }}", (*cond).to_string(), t.to_string(), e.to_string()),
             Ite(cond, t, None) => format!("if ({}) {{ {} }}", (*cond).to_string(), t.to_string()),
+            Lambda(params, body) => format!("fn ({}) {{ {} }}", params.join(", "), body.to_string()),
+            Call(name, args) => format!("{}({})", name, args.iter().map(Expr::to_string).collect::<Vec<_>>().join(", ")),
             PrefixExpr(op, arg) => format!("({}{})", op.to_string(), arg.to_string()),
             InfixOp(op, lhs, rhs) => format!("({} {} {})", lhs.to_string(), op.to_string(), rhs.to_string())
         }
@@ -178,6 +183,8 @@ pub struct Parser {
     infix_fn_map: HashMap<lexer::Token, InfixCont>,
 }
 
+// IMPORTANT NOTE: All prefix and infix parsing functions always leave the current token as the last token within the
+// rule being parsed, they do not advance past it.
 impl Parser {
     fn new(source_code: String) -> Result<Self, ParseError> {
         let mut lexer = lexer::Lexer::new(source_code);
@@ -192,6 +199,7 @@ impl Parser {
         parser.register_prefix_fn(lexer::Token::False, Self::parse_boolean_to_expr);
         parser.register_prefix_fn(lexer::Token::LPar, Self::parse_group);
         parser.register_prefix_fn(lexer::Token::If, Self::parse_ite);
+        parser.register_prefix_fn(lexer::Token::Fn, Self::parse_lambda);
         parser.register_infix_fn(lexer::Token::Plus, Self::parse_infix_expr);
         parser.register_infix_fn(lexer::Token::Minus, Self::parse_infix_expr);
         parser.register_infix_fn(lexer::Token::Mult, Self::parse_infix_expr);
@@ -200,6 +208,7 @@ impl Parser {
         parser.register_infix_fn(lexer::Token::GT, Self::parse_infix_expr);
         parser.register_infix_fn(lexer::Token::Eq, Self::parse_infix_expr);
         parser.register_infix_fn(lexer::Token::Neq, Self::parse_infix_expr);
+        parser.register_infix_fn(lexer::Token::LPar, Self::parse_call);
         Ok(parser)
     }
 
@@ -272,8 +281,48 @@ impl Parser {
         }
     }
 
-    fn parse_integer_to_expr(&mut self) -> Result<Expr, ParseError>
+    fn parse_lambda(&mut self) -> Result<Expr, ParseError>
+    {
+        self.advance_token()?; // fn
+        self.expect_token(LPar)?;
+        self.advance_token()?;
+        let mut params = vec![];
+        while let Id(param) = &self.curr_token {
+            params.push(param.clone());
+            self.advance_token()?;
+            if self.curr_token == Comma {
+                self.advance_token()?;
+            }
+        }
+        self.expect_token(RPar)?;
+        self.advance_token()?;
+        self.expect_token(LBrack)?;
+        self.advance_token()?;
+        let body = self.parse_block_stmt()?;
+        Ok(Expr::Lambda(params, body))
+    }
 
+    fn parse_call(&mut self, f_id: Expr) -> Result<Expr, ParseError>
+    {
+        let f_id_str = match f_id {
+            Expr::Ident(id) => id,
+            _ => unreachable!()
+        };
+        self.advance_token()?;
+        let mut args = vec![];
+        while self.curr_token != RPar {
+            let arg = self.parse_expr()?;
+            args.push(arg);
+            self.advance_token()?;
+            if self.curr_token == Comma {
+                self.advance_token()?;
+            }
+        }
+        self.expect_token(RPar)?;
+        Ok(Expr::Call(f_id_str, args))
+    }
+
+    fn parse_integer_to_expr(&mut self) -> Result<Expr, ParseError>
     {
         // This check looks redundant
         match self.curr_token {
@@ -367,19 +416,15 @@ impl Parser {
 
         let id = self.parse_id()?;
 
-        self.advance_token()?; // Equal sign
-        if self.curr_token != Assign {
-            return Err(ParseError::UnexpectedToken);
-        }
+        self.advance_token()?; // assign token
+        self.expect_token(Assign)?;
 
         self.advance_token()?;
 
         let expr = self.parse_expr()?;
 
-        self.advance_token()?; // semicolon
-        if self.curr_token != Semicolon {
-            return Err(ParseError::UnexpectedToken);
-        }
+        self.advance_token()?;
+        self.expect_token(Semicolon)?;
 
         self.advance_token()?;
 
@@ -393,9 +438,7 @@ impl Parser {
         let expr = self.parse_expr()?;
 
         self.advance_token()?;
-        if self.curr_token != Semicolon {
-            return Err(ParseError::UnexpectedToken);
-        }
+        self.expect_token(Semicolon)?;
 
         self.advance_token()?;
 
