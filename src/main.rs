@@ -35,7 +35,7 @@ fn repl() -> io::Result<()>
         let line = stdin.lock().lines().next().unwrap().unwrap();
         match parser::Parser::parse(line) {
             Ok(prog) => println!("{:?}", prog),
-            Err(_) => todo!(),
+            Err(err) => println!("Error while parsing! {:?}", err)
         }
     }
 }

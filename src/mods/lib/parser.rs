@@ -35,6 +35,7 @@ impl Precedence {
 
 type Id = String;
 
+#[derive(Debug)]
 pub enum ParseError { UnrecognizedToken, UnexpectedToken }
 
 #[derive(PartialEq, Debug)]
@@ -46,7 +47,7 @@ impl PrefixOperator {
         match tok {
             lexer::Token::Bang => Ok(PrefixOperator::Bang),
             lexer::Token::Minus => Ok(PrefixOperator::Minus),
-            _ => Err(ParseError::UnexpectedToken) // TODO: Should we have another parse error here?
+            _ => Err(ParseError::UnexpectedToken) // TODO: Specify expected and what you got in the error
         }
     }
 }
@@ -103,8 +104,10 @@ impl InfixOperator {
 enum Expr {
     Ident(Id),
     Integer(i64),
+    Boolean(bool),
+    Ite(Box<Expr>, BlockStmt, Option<BlockStmt>),
     PrefixExpr(PrefixOperator, Box<Expr>),
-    InfixExpr(InfixOperator, Box<Expr>, Box<Expr>)
+    InfixOp(InfixOperator, Box<Expr>, Box<Expr>)
 }
 
 impl ToString for Expr {
@@ -115,8 +118,11 @@ impl ToString for Expr {
         match self {
             Ident(name) => name.to_string(),
             Integer(num) => num.to_string(),
+            Boolean(b) => b.to_string(),
+            Ite(cond, t, Some(e)) => format!("if ({}) {{ {} }} else {{ {} }}", (*cond).to_string(), t.to_string(), e.to_string()),
+            Ite(cond, t, None) => format!("if ({}) {{ {} }}", (*cond).to_string(), t.to_string()),
             PrefixExpr(op, arg) => format!("({}{})", op.to_string(), arg.to_string()),
-            InfixExpr(op, lhs, rhs) => format!("({} {} {})", lhs.to_string(), op.to_string(), rhs.to_string())
+            InfixOp(op, lhs, rhs) => format!("({} {} {})", lhs.to_string(), op.to_string(), rhs.to_string())
         }
     }
 }
@@ -141,11 +147,11 @@ impl ToString for Stmt {
 }
 
 #[derive(PartialEq, Debug)]
-pub struct Program {
+pub struct BlockStmt {
     stmts: Vec<Stmt>
 }
 
-impl ToString for Program {
+impl ToString for BlockStmt {
     fn to_string(&self) -> String
     {
         self.stmts.iter().map(Stmt::to_string).collect::<Vec<_>>().concat()
@@ -182,6 +188,10 @@ impl Parser {
         parser.register_prefix_fn(lexer::Token::Integer(0), Self::parse_integer_to_expr);
         parser.register_prefix_fn(lexer::Token::Bang, Self::parse_prefix_expr);
         parser.register_prefix_fn(lexer::Token::Minus, Self::parse_prefix_expr);
+        parser.register_prefix_fn(lexer::Token::True, Self::parse_boolean_to_expr);
+        parser.register_prefix_fn(lexer::Token::False, Self::parse_boolean_to_expr);
+        parser.register_prefix_fn(lexer::Token::LPar, Self::parse_group);
+        parser.register_prefix_fn(lexer::Token::If, Self::parse_ite);
         parser.register_infix_fn(lexer::Token::Plus, Self::parse_infix_expr);
         parser.register_infix_fn(lexer::Token::Minus, Self::parse_infix_expr);
         parser.register_infix_fn(lexer::Token::Mult, Self::parse_infix_expr);
@@ -217,13 +227,67 @@ impl Parser {
         let prec = Precedence::token_precedence(&self.curr_token);
         self.advance_token()?;
         let rhs = self.parse_expr_prec(prec)?;
-        Ok(Expr::InfixExpr(op, Box::new(lhs), Box::new(rhs)))
+        Ok(Expr::InfixOp(op, Box::new(lhs), Box::new(rhs)))
+    }
+
+    fn expect_token(&self, tok: lexer::Token) -> Result<(), ParseError>
+    {
+        if self.curr_token == tok {
+            Ok(())
+        } else {
+            Err(ParseError::UnexpectedToken)
+        }
+    }
+
+    fn parse_group(&mut self) -> Result<Expr, ParseError>
+    {
+        self.advance_token()?;
+        let expr = self.parse_expr()?;
+        self.advance_token()?;
+        self.expect_token(RPar)?;
+        Ok(expr)
+    }
+
+    fn parse_ite(&mut self) -> Result<Expr, ParseError>
+    {
+        self.advance_token()?;
+        self.expect_token(LPar)?;
+        self.advance_token()?;
+        let cond = self.parse_expr()?;
+        self.advance_token()?;
+        self.expect_token(RPar)?;
+        self.advance_token()?;
+        self.expect_token(LBrack)?;
+        self.advance_token()?;
+        let then_block = self.parse_block_stmt()?;
+        if self.lexer.peek_token()? == Else {
+            self.advance_token()?; // RBrack
+            self.advance_token()?; // Else
+            self.expect_token(LBrack)?;
+            self.advance_token()?;
+            let else_block = self.parse_block_stmt()?;
+            Ok(Expr::Ite(Box::new(cond), then_block, Some(else_block)))
+        } else {
+            Ok(Expr::Ite(Box::new(cond), then_block, None))
+        }
     }
 
     fn parse_integer_to_expr(&mut self) -> Result<Expr, ParseError>
+
     {
+        // This check looks redundant
         match self.curr_token {
             Integer(num) => Ok(Expr::Integer(num)),
+            _ => Err(ParseError::UnexpectedToken)
+        }
+    }
+
+    /* We should have a single function parse literal for integer and bool and string */
+    fn parse_boolean_to_expr(&mut self) -> Result<Expr, ParseError>
+    {
+        match self.curr_token {
+            True => Ok(Expr::Boolean(true)),
+            False => Ok(Expr::Boolean(false)),
             _ => Err(ParseError::UnexpectedToken)
         }
     }
@@ -338,13 +402,27 @@ impl Parser {
         Ok(Stmt::ReturnStmt(expr))
     }
 
+    fn parse_block_stmt(&mut self) -> Result<BlockStmt, ParseError>
+    {
+        let mut block = BlockStmt { stmts: vec![] };
+        loop {
+            match self.curr_token {
+                Let => { let stmt = self.parse_let()?; block.stmts.push(stmt); },
+                Return => { let stmt = self.parse_return()?; block.stmts.push(stmt); },
+                RBrack => break,
+                _ => { let stmt = self.parse_expr_stmt()?; block.stmts.push(stmt); }
+            }
+        }
+        Ok(block)
+    }
+
     // I don't like the way this is structured. Parser should be something that we pass a string
     // and it returns the AST. Instead here its an object that holds a string and eventually in the
     // future we ask it to "parse" that string. It's weird.
     // TODO: This way we stop after the first error. What if we want to continue?
-    fn parse_program(&mut self) -> Result<Program, ParseError>
+    fn parse_prog(&mut self) -> Result<BlockStmt, ParseError>
     {
-        let mut prog = Program { stmts: vec![] };
+        let mut prog = BlockStmt { stmts: vec![] };
         loop {
             match self.curr_token {
                 Let => { let stmt = self.parse_let()?; prog.stmts.push(stmt); },
@@ -357,10 +435,10 @@ impl Parser {
     }
 
     // My solution will be to just expose this
-    pub fn parse(source_code: String) -> Result<Program, ParseError>
+    pub fn parse(source_code: String) -> Result<BlockStmt, ParseError>
     {
         let mut parser = Self::new(source_code)?;
-        parser.parse_program()
+        parser.parse_prog()
     }
 }
 
@@ -442,7 +520,7 @@ mod tests {
             if let Ok(prog) = Parser::parse(case.input.to_string()) {
                 assert_eq!(prog.stmts.len(), 1);
                 match &prog.stmts[0] {
-                    Stmt::ExprStmt(Expr::InfixExpr(op, lhs, rhs)) =>
+                    Stmt::ExprStmt(Expr::InfixOp(op, lhs, rhs)) =>
                         assert!(*op == case.op && **lhs == case.lhs && **rhs == case.rhs),
                     _ => panic!("Failed: wrong parsing")
                 }
