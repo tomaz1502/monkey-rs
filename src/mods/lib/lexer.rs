@@ -14,6 +14,7 @@ pub enum Token {
     RBrack,
     Semicolon,
     Comma,
+    Colon,
 
     // Operators (also delimiters)
     Plus,
@@ -35,6 +36,12 @@ pub enum Token {
     Else,
     True,
     False,
+
+    // Types
+    Int,
+    Bool,
+    Unit,
+    Arrow,
 
     // EOF
     Eof
@@ -126,6 +133,7 @@ impl Lexer {
         };
 
         match ch {
+            ':' => Ok(Colon),
             ';' => Ok(Semicolon),
             ',' => Ok(Comma),
             '(' => Ok(LPar),
@@ -141,7 +149,14 @@ impl Lexer {
                     Ok(Assign)
                 }
             }
-            '-' => Ok(Minus),
+            '-' => {
+                if Self::peek(input, ptr) == Some('>') {
+                    Self::read_char(input, ptr);
+                    Ok(Arrow)
+                } else {
+                    Ok(Minus)
+                }
+            }
             '*' => Ok(Mult),
             '<' => Ok(LT),
             '>' => Ok(GT),
@@ -165,6 +180,9 @@ impl Lexer {
                     "return" => Ok(Return),
                     "if"     => Ok(If),
                     "else"   => Ok(Else),
+                    "int"    => Ok(Int),
+                    "bool"   => Ok(Bool),
+                    "unit"   => Ok(Unit),
                     _        => Ok(Id(word))
                 }
             }

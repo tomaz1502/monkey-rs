@@ -45,8 +45,7 @@ fn main() -> io::Result<()>
     let args: Vec<String> = env::args().collect();
     if args.len() > 2 {
         die("Usage: monkey <program path> or just monkey");
-    }
-    else if args.len() == 2 {
+    } else if args.len() == 2 {
         let text = get_text(&args[1])?;
         let mut tokenizer = lexer::Lexer::new(text);
         let _tkn = tokenizer.get_next_token();
