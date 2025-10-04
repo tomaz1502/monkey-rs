@@ -2,11 +2,33 @@ use crate::mods::lib::expr::*;
 
 use std::collections::HashMap;
 
+impl Stmt
+{
+    fn tc(&self, ctx: &mut HashMap<Id, Type>) -> Option<Type>
+    {
+        match self {
+            Stmt::LetStmt(id, expr) => {
+                let t_expr = expr.tc(ctx)?;
+                // NOTE: Scopes are broken; we should have a stack of contexts
+                ctx.insert(id.clone(), t_expr);
+                Some(Type::Unit)
+            }
+            Stmt::ExprStmt(expr) => expr.tc(ctx),
+            Stmt::ReturnStmt(expr) => expr.tc(ctx),
+            Stmt::BlockStmt(block) => block.tc(ctx),
+        }
+    }
+}
+
 impl Block
 {
     fn tc(&self, ctx: &mut HashMap<Id, Type>) -> Option<Type>
     {
-        None
+        let mut typ = Some(Type::Unit);
+        for stmt in &self.stmts {
+            typ = Some(stmt.tc(ctx)?);
+        }
+        typ
     }
 }
 

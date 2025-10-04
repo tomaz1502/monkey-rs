@@ -40,15 +40,23 @@ fn repl() -> io::Result<()>
     }
 }
 
+fn interpret_file(file_path: &str) -> io::Result<()>
+{
+    let source_code = get_text(file_path)?;
+    match parser::Parser::parse(source_code) {
+        Ok(prog) => println!("{:?}", prog),
+        Err(err) => println!("Error while parsing! {:?}", err)
+    }
+    Ok(())
+}
+
 fn main() -> io::Result<()>
 {
     let args: Vec<String> = env::args().collect();
     if args.len() > 2 {
         die("Usage: monkey <program path> or just monkey");
     } else if args.len() == 2 {
-        let text = get_text(&args[1])?;
-        let mut tokenizer = lexer::Lexer::new(text);
-        let _tkn = tokenizer.get_next_token();
+        interpret_file(&args[1])?;
     } else {
         repl()?;
     }
