@@ -1,4 +1,3 @@
-
 #[derive(PartialEq, Debug, Clone)]
 pub enum Type
 {
@@ -23,7 +22,7 @@ impl ToString for Type
 
 pub type Id = String;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum Stmt
 {
     LetStmt(Id, Expr),
@@ -46,7 +45,7 @@ impl ToString for Stmt
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Block {
     pub stmts: Vec<Stmt>
 }
@@ -58,7 +57,7 @@ impl ToString for Block {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum PrefixOperator { Minus, Bang }
 
 impl ToString for PrefixOperator {
@@ -72,7 +71,7 @@ impl ToString for PrefixOperator {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum InfixOperator { Plus, Minus, Mult, Div, Eq, Neq, LT, GT }
 
 impl ToString for InfixOperator {
@@ -92,13 +91,13 @@ impl ToString for InfixOperator {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum Expr {
     Ident(Id),
     Integer(i64),
     Boolean(bool),
     Ite(Box<Expr>, Block, Option<Block>),
-    Lambda(Vec<(Id, Type)>, Block),
+    Lambda(Vec<(Id, Type)>, Type, Block),
     Call(Id, Vec<Expr>),
     PrefixOp(PrefixOperator, Box<Expr>),
     InfixOp(InfixOperator, Box<Expr>, Box<Expr>)
@@ -114,9 +113,9 @@ impl ToString for Expr {
             Boolean(b) => b.to_string(),
             Ite(cond, t, Some(e)) => format!("if ({}) {{ {} }} else {{ {} }}", (*cond).to_string(), t.to_string(), e.to_string()),
             Ite(cond, t, None) => format!("if ({}) {{ {} }}", (*cond).to_string(), t.to_string()),
-            Lambda(params, body) => {
+            Lambda(params, ret, body) => {
                 let typed_ids = params.into_iter().map(|(id, typ)| id.to_owned() + ": " + &typ.to_string() ).collect::<Vec<_>>();
-                format!("fn ({}) {{ {} }}", typed_ids.join(", "), body.to_string())
+                format!("fn ({}) -> {} {{ {} }}", typed_ids.join(", "), ret.to_string(), body.to_string())
             }
             Call(name, args) => format!("{}({})", name, args.iter().map(Expr::to_string).collect::<Vec<_>>().join(", ")),
             PrefixOp(op, arg) => format!("({}{})", op.to_string(), arg.to_string()),

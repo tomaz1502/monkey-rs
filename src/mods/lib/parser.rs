@@ -229,10 +229,15 @@ impl Parser {
         }
         self.expect_token(RPar)?;
         self.advance_token()?;
+        self.expect_token(Arrow)?;
+        self.advance_token()?;
+        let ret = self.parse_type()?;
+        self.advance_token()?;
+
         self.expect_token(LBrack)?;
         self.advance_token()?;
         let body = self.parse_block_stmt()?;
-        Ok(Expr::Lambda(params, body))
+        Ok(Expr::Lambda(params, ret, body))
     }
 
     fn parse_call(&mut self, f_id: Expr) -> Result<Expr, ParseError>

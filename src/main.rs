@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::io;
@@ -5,7 +6,6 @@ use std::path::Path;
 use std::process;
 use io::{Write, BufRead};
 
-use mods::lib::lexer;
 use mods::lib::parser;
 
 mod mods;
@@ -44,7 +44,23 @@ fn interpret_file(file_path: &str) -> io::Result<()>
 {
     let source_code = get_text(file_path)?;
     match parser::Parser::parse(source_code) {
-        Ok(prog) => println!("{:?}", prog),
+        Ok(prog) => {
+            let mut ctx = HashMap::new();
+            let opt_typ = prog.tc(&mut ctx);
+            match opt_typ {
+                None => println!("Typing error."),
+                Some(typ) => {
+                    println!("\n--------------------------------------------------------\n");
+                    println!("AST: {:?}", prog);
+                    println!("\n--------------------------------------------------------\n");
+                    println!("TYPE: {:?}", typ);
+                    let mut eval_ctx = HashMap::new();
+                    let res = prog.eval(&mut eval_ctx);
+                    println!("\n--------------------------------------------------------\n");
+                    println!("RESULT: {:?}", res)
+                }
+            }
+        }
         Err(err) => println!("Error while parsing! {:?}", err)
     }
     Ok(())
