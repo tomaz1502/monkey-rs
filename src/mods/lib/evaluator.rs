@@ -7,19 +7,18 @@ pub enum EvalResult {
     Integer(i64),
     Boolean(bool),
     Unit,
-    // We keep the types for pretty printing
-    #[allow(dead_code)]
+    #[allow(dead_code)] // We keep the types for pretty printing
     Lambda(Vec<(Id, Type)>, Type, Block),
 }
 
 impl Stmt
 {
-    fn eval(self, ctx: &mut HashMap<Id, EvalResult>) -> EvalResult
+    fn eval(&self, ctx: &mut HashMap<Id, EvalResult>) -> EvalResult
     {
         match self {
             Stmt::LetStmt(id, expr) => {
                 let res = Expr::eval(expr, ctx);
-                ctx.insert(id, res);
+                ctx.insert(id.clone(), res);
                 EvalResult::Unit
             }
             Stmt::ReturnStmt(expr) => Expr::eval(expr, ctx),
@@ -33,10 +32,10 @@ impl Stmt
 
 impl Block
 {
-    pub fn eval(self, ctx: &mut HashMap<Id, EvalResult>) -> EvalResult
+    pub fn eval(&self, ctx: &mut HashMap<Id, EvalResult>) -> EvalResult
     {
         let mut res = EvalResult::Unit;
-        for stmt in self.stmts.into_iter() {
+        for stmt in self.stmts.iter() {
             res = stmt.eval(ctx);
         }
         res
@@ -45,13 +44,13 @@ impl Block
 
 impl Expr
 {
-    fn eval(self, ctx: &mut HashMap<Id, EvalResult>) -> EvalResult
+    fn eval(&self, ctx: &mut HashMap<Id, EvalResult>) -> EvalResult
     {
         match self {
-            Expr::Integer(i) => EvalResult::Integer(i),
-            Expr::Boolean(b) => EvalResult::Boolean(b),
+            Expr::Integer(i) => EvalResult::Integer(*i),
+            Expr::Boolean(b) => EvalResult::Boolean(*b),
             Expr::Ident(id) => {
-                match ctx.get(&id) {
+                match ctx.get(id) {
                     None => unreachable!("[evaluator]: identifier not found"),
                     Some(v) => v.clone(),
                 }
@@ -67,21 +66,22 @@ impl Expr
                     }
                     _ => unreachable!("[evaluator]: ITE without ground boolean condition")
                 },
-            Expr::Lambda(params, ret, body) => EvalResult::Lambda(params, ret, body),
+            Expr::Lambda(params, ret, body) => EvalResult::Lambda(params.clone(), ret.clone(), body.clone()),
             Expr::Call(caller, args) => {
-                match ctx.get(&caller) {
+                match ctx.get(caller) {
                     None => unreachable!("[evaluator]: unknown symbol {caller}"),
                     Some(EvalResult::Lambda(params, _, body)) => {
                         // Call by value
                         let evaluated_args =
                             args.into_iter().map(|arg| { arg.eval(&mut ctx.clone()) }).collect::<Vec<_>>();
                         let mut new_ctx = ctx.clone();
-                        for i in 0..params.len() {
+                        let mut i = 0;
+                        for arg in evaluated_args.into_iter() {
                             let (id, _) = &params[i];
-                            let arg = &evaluated_args[i];
-                            new_ctx.insert(id.clone(), arg.clone());
+                            new_ctx.insert(id.clone(), arg);
+                            i += 1;
                         }
-                        body.clone().eval(&mut new_ctx)
+                        body.eval(&mut new_ctx)
                     },
                     Some(_) => unreachable!("[evaluator]: {caller} is not a function")
                 }
