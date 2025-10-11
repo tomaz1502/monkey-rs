@@ -7,6 +7,7 @@ use std::process;
 use io::{Write, BufRead};
 
 use mods::lib::parser;
+use mods::lib::evaluator;
 
 mod mods;
 
@@ -54,7 +55,7 @@ fn interpret_file(file_path: &str) -> io::Result<()>
                     println!("AST: {:?}", prog);
                     println!("\n--------------------------------------------------------\n");
                     println!("TYPE: {:?}", typ);
-                    let mut eval_ctx = HashMap::new();
+                    let mut eval_ctx = evaluator::Context { curr: HashMap::new(), parent: None };
                     let res = prog.eval(&mut eval_ctx);
                     println!("\n--------------------------------------------------------\n");
                     println!("RESULT: {:?}", res)

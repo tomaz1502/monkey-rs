@@ -3,7 +3,8 @@ use crate::mods::lib::expr::*;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
-pub enum EvalResult {
+pub enum EvalResult
+{
     Integer(i64),
     Boolean(bool),
     Unit,
@@ -11,14 +12,46 @@ pub enum EvalResult {
     Lambda(Vec<(Id, Type)>, Type, Block),
 }
 
+#[derive(Clone)]
+pub struct Context<'a>
+{
+    pub curr: HashMap<Id, EvalResult>,
+    pub parent: Option<Box<&'a Context<'a>>>,
+}
+
+impl<'a> Context<'a>
+{
+    fn search(&self, id: &Id) -> Option<&EvalResult>
+    {
+        if let Some(er) = self.curr.get(id) {
+            Some(er)
+        } else {
+            match &self.parent {
+                None => None,
+                Some(par) => Self::search(&*par, id)
+            }
+        }
+    }
+
+    pub fn create_on_top(&self, mp : HashMap<Id, EvalResult>) -> Context
+    {
+        Context { curr: mp, parent: Some(Box::new(&self)) }
+    }
+
+    pub fn create_empty_on_top(&self) -> Context
+    {
+        Self::create_on_top(self, HashMap::new())
+    }
+}
+
 impl Stmt
 {
-    fn eval(&self, ctx: &mut HashMap<Id, EvalResult>) -> EvalResult
+    fn eval(&self, ctx: &mut Context) -> EvalResult
     {
         match self {
             Stmt::LetStmt(id, expr) => {
                 let res = Expr::eval(expr, ctx);
-                ctx.insert(id.clone(), res);
+                ctx.curr.insert(id.clone(), res);
                 EvalResult::Unit
             }
             Stmt::ReturnStmt(expr) => Expr::eval(expr, ctx),
@@ -32,7 +65,7 @@ impl Stmt
 
 impl Block
 {
-    pub fn eval(&self, ctx: &mut HashMap<Id, EvalResult>) -> EvalResult
+    pub fn eval(&self, ctx: &mut Context) -> EvalResult
     {
         let mut res = EvalResult::Unit;
         for stmt in self.stmts.iter() {
@@ -44,13 +77,13 @@ impl Block
 
 impl Expr
 {
-    fn eval(&self, ctx: &mut HashMap<Id, EvalResult>) -> EvalResult
+    fn eval(&self, ctx: &mut Context) -> EvalResult
     {
         match self {
             Expr::Integer(i) => EvalResult::Integer(*i),
             Expr::Boolean(b) => EvalResult::Boolean(*b),
             Expr::Ident(id) => {
-                match ctx.get(id) {
+                match ctx.search(id) {
                     None => unreachable!("[evaluator]: identifier not found"),
                     Some(v) => v.clone(),
                 }
@@ -66,21 +99,29 @@ impl Expr
                     }
                     _ => unreachable!("[evaluator]: ITE without ground boolean condition")
                 },
-            Expr::Lambda(params, ret, body) => EvalResult::Lambda(params.clone(), ret.clone(), body.clone()),
+            Expr::Lambda(params, ret, body) => {
+                println!("Hello");
+                EvalResult::Lambda(params.clone(), ret.clone(), body.clone())
+            },
             Expr::Call(caller, args) => {
-                match ctx.get(caller) {
+                match ctx.search(caller) {
                     None => unreachable!("[evaluator]: unknown symbol {caller}"),
                     Some(EvalResult::Lambda(params, _, body)) => {
                         // Call by value
-                        let evaluated_args =
-                            args.into_iter().map(|arg| { arg.eval(&mut ctx.clone()) }).collect::<Vec<_>>();
-                        let mut new_ctx = ctx.clone();
+                        let mut evaluated_args = vec![];
+                        for arg in args.into_iter() {
+                            let mut new_ctx = Context::create_empty_on_top(&ctx);
+                            let evaluated_arg = arg.eval(&mut new_ctx);
+                            evaluated_args.push(evaluated_arg);
+                        }
+                        let mut new_map : HashMap<Id, EvalResult> = HashMap::new();
                         let mut i = 0;
                         for arg in evaluated_args.into_iter() {
-                            let (id, _) = &params[i];
-                            new_ctx.insert(id.clone(), arg);
+                            let id = params[i].0.clone();
+                            new_map.insert(id, arg);
                             i += 1;
                         }
+                        let mut new_ctx = Context::create_on_top(ctx, new_map);
                         body.eval(&mut new_ctx)
                     },
                     Some(_) => unreachable!("[evaluator]: {caller} is not a function")
