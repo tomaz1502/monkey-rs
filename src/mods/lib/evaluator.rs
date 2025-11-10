@@ -112,11 +112,9 @@ impl Expr
                             evaluated_args.push(evaluated_arg);
                         }
                         let mut new_map : HashMap<Id, EvalResult> = HashMap::new();
-                        let mut i = 0;
-                        for arg in evaluated_args.into_iter() {
+                        for (i, arg) in evaluated_args.into_iter().enumerate() {
                             let id = params[i].0.clone();
                             new_map.insert(id, arg);
-                            i += 1;
                         }
                         let f = EvalResult::Lambda(params, typ, body.clone());
                         new_map.insert(caller.to_string(), f);
