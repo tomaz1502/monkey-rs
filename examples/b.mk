@@ -1,5 +1,5 @@
 let counter = fn (x : int) -> int {
-	if (x < 630) {
+	if (x < 1400) {
 		return counter(x + 1);
 	} else {
 		return x;

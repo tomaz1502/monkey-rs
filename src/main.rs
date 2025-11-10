@@ -55,7 +55,7 @@ fn interpret_file(file_path: &str) -> io::Result<()>
                     println!("AST: {:?}", prog);
                     println!("\n--------------------------------------------------------\n");
                     println!("TYPE: {:?}", typ);
-                    let eval_ctx = evaluator::LocalContext { counter: 0.into(), curr: HashMap::new(), parent: None };
+                    let eval_ctx = evaluator::LocalContext { curr: HashMap::new(), parent: None };
                     let res = prog.eval(std::rc::Rc::new(eval_ctx.into()));
                     println!("\n--------------------------------------------------------\n");
                     println!("RESULT: {:?}", res)

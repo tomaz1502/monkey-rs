@@ -16,34 +16,26 @@ pub enum EvalResult
 
 pub struct LocalContext
 {
-    pub counter: RefCell<i32>,
     pub curr: HashMap<Id, EvalResult>,
     pub parent: Option<Rc<RefCell<LocalContext>>>,
 }
 
 impl LocalContext
 {
-    fn search(&self, id: &Id, depth: i32) -> Option<EvalResult>
+    fn search(&self, id: &Id) -> Option<EvalResult>
     {
-        println!("searching with counter: {}", self.get_counter());
-        println!("depth: {depth}");
         if let Some(er) = self.curr.get(id) {
             Some(er.clone())
         } else if let Some(par) = &self.parent {
-            par.borrow().search(id, depth + 1)
+            par.borrow().search(id)
         } else {
             None
         }
     }
 
-    fn get_counter(&self) -> i32 {
-        *self.counter.borrow()
-    }
-
     pub fn create_on_top(s: Rc<RefCell<Self>>, mp : HashMap<Id, EvalResult>) -> Self
     {
-        let c = s.borrow().get_counter();
-        LocalContext { counter: (c + 1).into(), curr: mp, parent: Some(s) }
+        LocalContext { curr: mp, parent: Some(s) }
     }
 
     pub fn create_empty_on_top(s: Rc<RefCell<Self>>) -> Self
@@ -91,7 +83,7 @@ impl Expr
             Expr::Integer(i) => EvalResult::Integer(*i),
             Expr::Boolean(b) => EvalResult::Boolean(*b),
             Expr::Ident(id) => {
-                match lctx.borrow().search(id, 0) {
+                match lctx.borrow().search(id) {
                     None => unreachable!("[evaluator]: identifier not found"),
                     Some(v) => v.clone(),
                 }
@@ -109,7 +101,7 @@ impl Expr
                 },
             Expr::Lambda(params, ret, body) => EvalResult::Lambda(params.clone(), ret.clone(), body.clone()),
             Expr::Call(caller, args) => {
-                match lctx.borrow().search(caller, 0) {
+                match lctx.borrow().search(caller) {
                     None => unreachable!("[evaluator]: unknown symbol {caller}"),
                     Some(EvalResult::Lambda(params, typ, body)) => {
                         // Call by value
@@ -128,22 +120,10 @@ impl Expr
                         }
                         let f = EvalResult::Lambda(params, typ, body.clone());
                         new_map.insert(caller.to_string(), f);
-                        let new_ctx = LocalContext { counter: 0.into(), curr: new_map, parent: None };
+                        let new_ctx = LocalContext { curr: new_map, parent: None };
                         body.eval(Rc::new(new_ctx.into()))
                     },
                     Some(_) => unreachable!("[evaluator]: {caller} is not a function")
-                }
-            },
-            Expr::PrefixOp(PrefixOperator::Bang, b_) => {
-                match b_.eval(lctx) {
-                    EvalResult::Boolean(b) => EvalResult::Boolean(!b),
-                    _ => unreachable!("[evaluator]: !b, where b is not bool"),
-                }
-            },
-            Expr::PrefixOp(PrefixOperator::Minus, n_) => {
-                match n_.eval(lctx) {
-                    EvalResult::Integer(n) => EvalResult::Integer(-n),
-                    _ => unreachable!("[evaluator]: -n, where n is not int"),
                 }
             },
             Expr::InfixOp(InfixOperator::Plus, n_, m_) => {
@@ -152,50 +132,13 @@ impl Expr
                     _ => unreachable!("[evaluator]: n + m where n and m are not both int"),
                 }
             },
-            Expr::InfixOp(InfixOperator::Minus, n_, m_) => {
-                match (n_.eval(Rc::clone(&lctx)), m_.eval(lctx)) {
-                    (EvalResult::Integer(n), EvalResult::Integer(m)) => EvalResult::Integer(n - m),
-                    _ => unreachable!("[evaluator]: n - m where n and m are not both int"),
-                }
-            },
-            Expr::InfixOp(InfixOperator::Mult, n_, m_) => {
-                match (n_.eval(Rc::clone(&lctx)), m_.eval(lctx)) {
-                    (EvalResult::Integer(n), EvalResult::Integer(m)) => EvalResult::Integer(n * m),
-                    _ => unreachable!("[evaluator]: n * m where n and m are not both int"),
-                }
-            },
-            Expr::InfixOp(InfixOperator::Div, n_, m_) => {
-                match (n_.eval(Rc::clone(&lctx)), m_.eval(lctx)) {
-                    (EvalResult::Integer(n), EvalResult::Integer(m)) => EvalResult::Integer(n / m),
-                    _ => unreachable!("[evaluator]: n / m where n and m are not both int"),
-                }
-            },
             Expr::InfixOp(InfixOperator::LT, n_, m_) => {
                 match (n_.eval(Rc::clone(&lctx)), m_.eval(lctx)) {
                     (EvalResult::Integer(n), EvalResult::Integer(m)) => EvalResult::Boolean(n < m),
                     _ => unreachable!("[evaluator]: n < m where n and m are not both int"),
                 }
             },
-            Expr::InfixOp(InfixOperator::GT, n_, m_) => {
-                match (n_.eval(Rc::clone(&lctx)), m_.eval(lctx)) {
-                    (EvalResult::Integer(n), EvalResult::Integer(m)) => EvalResult::Boolean(n > m),
-                    _ => unreachable!("[evaluator]: n > m where n and m are not both int"),
-                }
-            },
-            Expr::InfixOp(InfixOperator::Eq, n_, m_) => {
-                match (n_.eval(Rc::clone(&lctx)), m_.eval(lctx)) {
-                    (EvalResult::Integer(n), EvalResult::Integer(m)) => EvalResult::Boolean(n == m),
-                    (EvalResult::Boolean(n), EvalResult::Boolean(m)) => EvalResult::Boolean(n == m),
-                    _ => unreachable!("[evaluator]: n == m, where n and m are not both int or bool"),
-                }
-            },
-            Expr::InfixOp(InfixOperator::Neq, n_, m_) => {
-                match (n_.eval(Rc::clone(&lctx)), m_.eval(lctx)) {
-                    (EvalResult::Integer(n), EvalResult::Integer(m)) => EvalResult::Boolean(n != m),
-                    (EvalResult::Boolean(n), EvalResult::Boolean(m)) => EvalResult::Boolean(n != m),
-                    _ => unreachable!("[evaluator]: n != m, where n and m are not both int or bool"),
-                }
-            },
+            _ => unreachable!(),
         }
     }
 }
