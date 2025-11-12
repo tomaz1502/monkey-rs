@@ -186,7 +186,7 @@ impl Lexer {
                     _        => Ok(Id(word))
                 }
             }
-            '1'..='9' => {
+            '0'..='9' => {
                 let rest = Self::read_while(input, ptr, |b| { (b as char).is_numeric() });
                 let num_str = String::from(ch) + &rest;
                 match num_str.parse::<i64>() {
