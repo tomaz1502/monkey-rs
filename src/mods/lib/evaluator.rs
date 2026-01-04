@@ -5,8 +5,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 #[derive(Clone, Debug)]
-pub enum EvalResult
-{
+pub enum EvalResult {
     Integer(i64),
     Boolean(bool),
     Unit,
@@ -15,16 +14,13 @@ pub enum EvalResult
 }
 
 #[derive(Clone)]
-pub struct LocalContext
-{
+pub struct LocalContext {
     pub curr: HashMap<Id, EvalResult>,
     pub parent: Option<Rc<RefCell<LocalContext>>>,
 }
 
-impl LocalContext
-{
-    fn search(&self, id: &Id) -> Option<EvalResult>
-    {
+impl LocalContext {
+    fn search(&self, id: &Id) -> Option<EvalResult> {
         if let Some(er) = self.curr.get(id) {
             Some(er.clone())
         } else if let Some(par) = &self.parent {
@@ -34,35 +30,30 @@ impl LocalContext
         }
     }
 
-    pub fn stack(s: Rc<RefCell<LocalContext>>) -> Self
-    {
+    pub fn stack(s: Rc<RefCell<LocalContext>>) -> Self {
         LocalContext { curr: HashMap::new(), parent: Some(s) }
     }
 }
 
-impl Stmt
-{
-    fn eval(&self, lctx: &mut LocalContext) -> EvalResult
-    {
+impl Stmt {
+    fn eval(&self, lctx: &mut LocalContext) -> EvalResult {
         match self {
-            Stmt::LetStmt(id, expr) => {
+            Stmt::Let(id, expr) => {
                 let res = expr.eval(lctx);
                 lctx.curr.insert(id.clone(), res);
                 EvalResult::Unit
             }
-            Stmt::ReturnStmt(expr) => Expr::eval(expr, lctx),
-            Stmt::ExprStmt(expr) => Expr::eval(expr, lctx),
-            Stmt::BlockStmt(block) => {
+            Stmt::Return(expr) => Expr::eval(expr, lctx),
+            Stmt::Expr(expr) => Expr::eval(expr, lctx),
+            Stmt::Block(block) => {
                 Block::eval(block, lctx)
             }
         }
     }
 }
 
-impl Block
-{
-    pub fn eval(&self, lctx: &mut LocalContext) -> EvalResult
-    {
+impl Block {
+    pub fn eval(&self, lctx: &mut LocalContext) -> EvalResult {
         let mut res = EvalResult::Unit;
         for stmt in self.stmts.iter() {
             res = stmt.eval(lctx);
@@ -71,10 +62,8 @@ impl Block
     }
 }
 
-impl Expr
-{
-    fn eval(&self, lctx: &mut LocalContext) -> EvalResult
-    {
+impl Expr {
+    fn eval(&self, lctx: &mut LocalContext) -> EvalResult {
         match self {
             Expr::Integer(i) => EvalResult::Integer(*i),
             Expr::Boolean(b) => EvalResult::Boolean(*b),
@@ -101,7 +90,7 @@ impl Expr
                     None => unreachable!("[evaluator]: unknown symbol {caller}"),
                     Some(EvalResult::Lambda(params, typ, body)) => {
                         let mut evaluated_args = vec![];
-                        for arg in args.into_iter() {
+                        for arg in args.iter() {
                             let lctx_cln = lctx.clone().into();
                             let mut new_ctx = LocalContext::stack(Rc::new(lctx_cln));
                             let evaluated_arg = arg.eval(&mut new_ctx);

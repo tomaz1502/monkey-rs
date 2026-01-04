@@ -48,16 +48,14 @@ pub enum Token {
 }
 
 impl Token {
-    fn discriminant(&self) -> u8
-    {
+    fn discriminant(&self) -> u8 {
         unsafe { *<*const _>::from(self).cast::<u8>() }
     }
 }
 
 // we can't derive because we need Id(_) = Id(_) and Integer(_) = Integer(_) for the hashmap
 impl PartialEq for Token {
-    fn eq(&self, other: &Token) -> bool
-    {
+    fn eq(&self, other: &Token) -> bool {
         self.discriminant() == other.discriminant()
     }
 }
@@ -65,8 +63,7 @@ impl PartialEq for Token {
 impl std::cmp::Eq for Token {}
 
 impl std::hash::Hash for Token {
-    fn hash<H: Hasher>(&self, state: &mut H)
-    {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_u8(self.discriminant());
     }
 }
@@ -83,17 +80,15 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    pub fn new(input: String) -> Self
-    {
+    pub fn new(input: String) -> Self {
         Lexer { input: input.as_bytes().to_vec(), ptr: 0 }
     }
 
-    fn is_space(byt: u8) -> bool
-    {
-        return byt == b' ' || byt == b'\n' || byt == b'\t';
+    fn is_space(byt: u8) -> bool {
+        byt == b' ' || byt == b'\n' || byt == b'\t'
     }
 
-    fn peek(input: &Vec<u8>, ptr: &usize) -> Option<char> {
+    fn peek(input: &[u8], ptr: &usize) -> Option<char> {
         if *ptr == input.len() {
             None
         } else {
@@ -101,7 +96,7 @@ impl Lexer {
         }
     }
 
-    fn read_char(input: &Vec<u8>, ptr: &mut usize) -> Option<char> {
+    fn read_char(input: &[u8], ptr: &mut usize) -> Option<char> {
         if *ptr == input.len() {
             None
         } else {
@@ -111,8 +106,7 @@ impl Lexer {
         }
     }
 
-    fn read_while(input: &Vec<u8>, ptr: &mut usize, pred: fn(u8) -> bool) -> String
-    {
+    fn read_while(input: &[u8], ptr: &mut usize, pred: fn(u8) -> bool) -> String {
         let mut tok = String::from("");
         while *ptr < input.len() && pred(input[*ptr]) {
             tok.push(input[*ptr] as char);
@@ -121,8 +115,7 @@ impl Lexer {
         tok
     }
 
-    fn get_next_aux(input: &Vec<u8>, ptr: &mut usize) -> Result<Token, LexError>
-    {
+    fn get_next_aux(input: &[u8], ptr: &mut usize) -> Result<Token, LexError> {
         while *ptr < input.len() && Self::is_space(input[*ptr]) {
             *ptr += 1;
         }
@@ -199,13 +192,11 @@ impl Lexer {
     }
 
     // TODO: Iterator trait?
-    pub fn get_next_token(&mut self) -> Result<Token, LexError>
-    {
+    pub fn get_next_token(&mut self) -> Result<Token, LexError> {
         Self::get_next_aux(&self.input, &mut self.ptr)
     }
 
-    pub fn peek_token(&self) -> Result<Token, LexError>
-    {
+    pub fn peek_token(&self) -> Result<Token, LexError> {
         let mut p = self.ptr;
         Self::get_next_aux(&self.input, &mut p)
     }
@@ -218,8 +209,7 @@ mod tests {
     use super::LexError::*;
 
     #[test]
-    fn tokenize_simple_program()
-    {
+    fn tokenize_simple_program() {
         let program = "
             let five = 5;
             let ten = 10;

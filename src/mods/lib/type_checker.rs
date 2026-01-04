@@ -2,28 +2,24 @@ use crate::mods::lib::expr::*;
 
 use std::collections::HashMap;
 
-impl Stmt
-{
-    fn tc(&self, ctx: &mut HashMap<Id, Type>) -> Option<Type>
-    {
+impl Stmt {
+    fn tc(&self, ctx: &mut HashMap<Id, Type>) -> Option<Type> {
         match self {
-            Stmt::LetStmt(id, expr) => {
+            Stmt::Let(id, expr) => {
                 let t_expr = expr.tc(ctx, &Some(id.to_string()))?;
                 // NOTE: Scopes are broken; we should have a stack of contexts
                 ctx.insert(id.clone(), t_expr);
                 Some(Type::Unit)
             }
-            Stmt::ExprStmt(expr) => expr.tc(ctx, &None),
-            Stmt::ReturnStmt(expr) => expr.tc(ctx, &None),
-            Stmt::BlockStmt(block) => block.tc(ctx),
+            Stmt::Expr(expr) => expr.tc(ctx, &None),
+            Stmt::Return(expr) => expr.tc(ctx, &None),
+            Stmt::Block(block) => block.tc(ctx),
         }
     }
 }
 
-impl Block
-{
-    pub fn tc(&self, ctx: &mut HashMap<Id, Type>) -> Option<Type>
-    {
+impl Block {
+    pub fn tc(&self, ctx: &mut HashMap<Id, Type>) -> Option<Type> {
         let mut typ = Some(Type::Unit);
         for stmt in &self.stmts {
             typ = Some(stmt.tc(ctx)?);
@@ -32,11 +28,9 @@ impl Block
     }
 }
 
-impl Expr
-{
-    fn build_arrow_aux(params: &[(Id, Type)], codom : &Type) -> Type
-    {
-        match &params[..] {
+impl Expr {
+    fn build_arrow_aux(params: &[(Id, Type)], codom : &Type) -> Type {
+        match params {
             [] => codom.clone(),
             [prv_types @ .., last_type] => {
                 Self::build_arrow_aux(prv_types, &Type::Arrow(Box::new(last_type.1.clone()), Box::new(codom.clone())))
@@ -44,8 +38,7 @@ impl Expr
         }
     }
 
-    fn build_arrow(params: &[(Id, Type)], codom : &Type) -> Type
-    {
+    fn build_arrow(params: &[(Id, Type)], codom : &Type) -> Type {
         if params.is_empty() { // create a thunk
             Type::Arrow(Box::new(Type::Unit), Box::new(codom.clone()))
 
@@ -54,8 +47,7 @@ impl Expr
         }
     }
 
-    fn check_call(caller_type: Type, arg_types : &[Type]) -> Option<Type>
-    {
+    fn check_call(caller_type: Type, arg_types : &[Type]) -> Option<Type> {
         match (caller_type, arg_types) {
             (Type::Arrow(t1, t2), [hd, tl @ ..]) => {
                 if *t1 == *hd {
@@ -69,10 +61,9 @@ impl Expr
         }
     }
 
-    fn tc(&self, ctx: &mut HashMap<Id, Type>, opt_let_name : &Option<String>) -> Option<Type>
-    {
+    fn tc(&self, ctx: &mut HashMap<Id, Type>, opt_let_name : &Option<String>) -> Option<Type> {
         match self {
-            Expr::Ident(id) => ctx.get(id).map(|typ| { typ.clone() }),
+            Expr::Ident(id) => ctx.get(id).cloned(),
             Expr::Integer(_) => Some(Type::Integer),
             Expr::Boolean(_) => Some(Type::Boolean),
             Expr::Ite(cond, t, opt_e) => {

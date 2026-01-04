@@ -1,21 +1,20 @@
+use std::fmt;
+
 #[derive(PartialEq, Debug, Clone)]
-pub enum Type
-{
+pub enum Type {
     Integer,
     Boolean,
     Unit,
     Arrow(Box<Type>, Box<Type>)
 }
 
-impl ToString for Type
-{
-    fn to_string(&self) -> String
-    {
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_> ) -> fmt::Result {
         match self {
-            Type::Integer => "int".to_string(),
-            Type::Boolean => "bool".to_string(),
-            Type::Unit    => "unit".to_string(),
-            Type::Arrow(t1, t2) => t1.to_string() + " -> " + &t2.to_string()
+            Type::Integer => write!(f, "int"),
+            Type::Boolean =>  write!(f, "bool"),
+            Type::Unit    =>  write!(f, "unit"),
+            Type::Arrow(t1, t2) => write!(f, "{} -> {}", t1, t2),
         }
     }
 }
@@ -23,24 +22,21 @@ impl ToString for Type
 pub type Id = String;
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum Stmt
-{
-    LetStmt(Id, Expr),
-    ReturnStmt(Expr),
-    ExprStmt(Expr),
-    BlockStmt(Block)
+pub enum Stmt {
+    Let(Id, Expr),
+    Return(Expr),
+    Expr(Expr),
+    Block(Block)
 }
 
-impl ToString for Stmt
-{
-    fn to_string(&self) -> String
-    {
+impl fmt::Display for Stmt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_> ) -> fmt::Result {
         use Stmt::*;
         match self {
-            LetStmt(id, e) => format!("let {} = {};", id, e.to_string()),
-            ReturnStmt(e) => format!("return {};", e.to_string()),
-            ExprStmt(e) => e.to_string(),
-            BlockStmt(b) => b.to_string()
+            Let(id, e) => write!(f, "let {} = {};", id, e),
+            Return(e) => write!(f, "return {};", e),
+            Expr(e) => write!(f, "{}", e),
+            Block(b) => write!(f, "{}", b),
         }
     }
 }
@@ -50,23 +46,24 @@ pub struct Block {
     pub stmts: Vec<Stmt>
 }
 
-impl ToString for Block {
-    fn to_string(&self) -> String
-    {
-        self.stmts.iter().map(Stmt::to_string).collect::<Vec<_>>().concat()
+impl fmt::Display for Block {
+    fn fmt(&self, f: &mut fmt::Formatter<'_> ) -> fmt::Result {
+        for stmt in self.stmts.iter() {
+            write!(f, "{}", stmt)?;
+        }
+        Ok(())
     }
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum PrefixOperator { Minus, Bang }
 
-impl ToString for PrefixOperator {
-    fn to_string(&self) -> String
-    {
+impl fmt::Display for PrefixOperator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_> ) -> fmt::Result {
         use PrefixOperator::*;
         match self {
-            Minus => "-".to_string(),
-            Bang => "!".to_string(),
+            Minus => write!(f, "-"),
+            Bang => write!(f, "!"),
         }
     }
 }
@@ -74,19 +71,18 @@ impl ToString for PrefixOperator {
 #[derive(PartialEq, Debug, Clone)]
 pub enum InfixOperator { Plus, Minus, Mult, Div, Eq, Neq, LT, GT }
 
-impl ToString for InfixOperator {
-    fn to_string(&self) -> String
-    {
+impl fmt::Display for InfixOperator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_> ) -> fmt::Result {
         use InfixOperator::*;
         match self {
-            Plus => "+".to_string(),
-            Minus => "-".to_string(),
-            Mult => "*".to_string(),
-            Div => "/".to_string(),
-            Eq => "==".to_string(),
-            Neq => "!=".to_string(),
-            LT => "<".to_string(),
-            GT => ">".to_string(),
+            Plus => write!(f, "+"),
+            Minus => write!(f, "-"),
+            Mult => write!(f, "*"),
+            Div => write!(f, "/"),
+            Eq => write!(f, "="),
+            Neq => write!(f, "!="),
+            LT => write!(f, "<"),
+            GT => write!(f, ">"),
         }
     }
 }
@@ -103,23 +99,22 @@ pub enum Expr {
     InfixOp(InfixOperator, Box<Expr>, Box<Expr>)
 }
 
-impl ToString for Expr {
-    fn to_string(&self) -> String
-    {
+impl fmt::Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_> ) -> fmt::Result {
         use Expr::*;
         match self {
-            Ident(name) => name.to_string(),
-            Integer(num) => num.to_string(),
-            Boolean(b) => b.to_string(),
-            Ite(cond, t, Some(e)) => format!("if ({}) {{ {} }} else {{ {} }}", (*cond).to_string(), t.to_string(), e.to_string()),
-            Ite(cond, t, None) => format!("if ({}) {{ {} }}", (*cond).to_string(), t.to_string()),
+            Ident(name) => write!(f, "{}", name),
+            Integer(num) => write!(f, "{}", num),
+            Boolean(b) => write!(f, "{}", b),
+            Ite(cond, t, Some(e)) => write!(f, "if ({}) {{ {} }} else {{ {} }}", (*cond), t, e),
+            Ite(cond, t, None) => write!(f, "if ({}) {{ {} }}", (*cond), t),
             Lambda(params, ret, body) => {
-                let typed_ids = params.into_iter().map(|(id, typ)| id.to_owned() + ": " + &typ.to_string() ).collect::<Vec<_>>();
-                format!("fn ({}) -> {} {{ {} }}", typed_ids.join(", "), ret.to_string(), body.to_string())
+                let typed_ids = params.iter().map(|(id, typ)| id.to_owned() + ": " + &typ.to_string() ).collect::<Vec<_>>();
+                write!(f, "fn ({}) -> {} {{ {} }}", typed_ids.join(", "), ret, body)
             }
-            Call(name, args) => format!("{}({})", name, args.iter().map(Expr::to_string).collect::<Vec<_>>().join(", ")),
-            PrefixOp(op, arg) => format!("({}{})", op.to_string(), arg.to_string()),
-            InfixOp(op, lhs, rhs) => format!("({} {} {})", lhs.to_string(), op.to_string(), rhs.to_string())
+            Call(name, args) => write!(f, "{}({})", name, args.iter().map(Expr::to_string).collect::<Vec<_>>().join(", ")),
+            PrefixOp(op, arg) => write!(f, "({}{})", op, arg),
+            InfixOp(op, lhs, rhs) => write!(f, "({} {} {})", lhs, op, rhs)
         }
     }
 }

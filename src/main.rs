@@ -11,14 +11,12 @@ use mods::lib::evaluator;
 
 mod mods;
 
-fn die(msg: &str) -> ()
-{
+fn die(msg: &str) {
     println!("{}", msg);
     process::exit(1)
 }
 
-fn get_text(file_path: &str) -> io::Result<String>
-{
+fn get_text(file_path: &str) -> io::Result<String> {
     if Path::new(file_path).exists() {
         fs::read_to_string(file_path)
     } else {
@@ -27,8 +25,7 @@ fn get_text(file_path: &str) -> io::Result<String>
     }
 }
 
-fn repl() -> io::Result<()>
-{
+fn repl() -> io::Result<()> {
     let stdin = io::stdin();
     loop {
         print!(">> ");
@@ -41,8 +38,7 @@ fn repl() -> io::Result<()>
     }
 }
 
-fn interpret_file(file_path: &str) -> io::Result<()>
-{
+fn interpret_file(file_path: &str) -> io::Result<()> {
     let source_code = get_text(file_path)?;
     match parser::Parser::parse(source_code) {
         Ok(prog) => {
@@ -67,8 +63,7 @@ fn interpret_file(file_path: &str) -> io::Result<()>
     Ok(())
 }
 
-fn main() -> io::Result<()>
-{
+fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.len() > 2 {
         die("Usage: monkey <program path> or just monkey");
