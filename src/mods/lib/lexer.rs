@@ -195,11 +195,6 @@ impl Lexer {
     pub fn get_next_token(&mut self) -> Result<Token, LexError> {
         Self::get_next_aux(&self.input, &mut self.ptr)
     }
-
-    pub fn peek_token(&self) -> Result<Token, LexError> {
-        let mut p = self.ptr;
-        Self::get_next_aux(&self.input, &mut p)
-    }
 }
 
 #[cfg(test)]

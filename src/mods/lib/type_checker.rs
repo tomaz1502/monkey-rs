@@ -11,15 +11,20 @@ impl Stmt {
                 ctx.insert(id.clone(), t_expr);
                 Some(Type::Unit)
             }
-            Stmt::Expr(expr) => expr.tc(ctx, &None),
-            Stmt::Return(expr) => expr.tc(ctx, &None),
-            Stmt::Block(block) => block.tc(ctx),
+            Stmt::Expr(expr)    => expr.tc(ctx, &None),
+            Stmt::Return(expr)  => expr.tc(ctx, &None),
+            Stmt::Block(block)  => block.tc_with_context(ctx),
         }
     }
 }
 
 impl Block {
-    pub fn tc(&self, ctx: &mut HashMap<Id, Type>) -> Option<Type> {
+    pub fn tc(&self) -> Option<Type> {
+        let mut ctx = HashMap::new();
+        self.tc_with_context(&mut ctx)
+    }
+
+    fn tc_with_context(&self, ctx: &mut HashMap<Id, Type>) -> Option<Type> {
         let mut typ = Some(Type::Unit);
         for stmt in &self.stmts {
             typ = Some(stmt.tc(ctx)?);
@@ -63,16 +68,16 @@ impl Expr {
 
     fn tc(&self, ctx: &mut HashMap<Id, Type>, opt_let_name : &Option<String>) -> Option<Type> {
         match self {
-            Expr::Ident(id) => ctx.get(id).cloned(),
+            Expr::Ident(id)  => ctx.get(id).cloned(),
             Expr::Integer(_) => Some(Type::Integer),
             Expr::Boolean(_) => Some(Type::Boolean),
             Expr::Ite(cond, t, opt_e) => {
                 let t_cond = cond.tc(ctx, opt_let_name)?;
                 if t_cond == Type::Boolean {
-                    let tt = t.tc(ctx)?;
+                    let tt = t.tc_with_context(ctx)?;
                     let te =
                         match opt_e {
-                            Some(e) => e.tc(ctx)?,
+                            Some(e) => e.tc_with_context(ctx)?,
                             None => Type::Unit
                         };
                     if tt == te {
@@ -93,7 +98,7 @@ impl Expr {
                 for (id, typ) in params {
                     new_ctx.insert(id.clone(), typ.clone());
                 }
-                let t_block = body.tc(&mut new_ctx)?;
+                let t_block = body.tc_with_context(&mut new_ctx)?;
                 if t_block != *ret {
                     None
                 } else {
@@ -121,9 +126,9 @@ impl Expr {
                     None
                 }
             }
-            Expr::InfixOp(InfixOperator::Plus, e1, e2) |
+            Expr::InfixOp(InfixOperator::Plus, e1, e2)  |
             Expr::InfixOp(InfixOperator::Minus, e1, e2) |
-            Expr::InfixOp(InfixOperator::Mult, e1, e2) |
+            Expr::InfixOp(InfixOperator::Mult, e1, e2)  |
             Expr::InfixOp(InfixOperator::Div, e1, e2) => {
                 let te1 = e1.tc(ctx, opt_let_name)?;
                 let te2 = e2.tc(ctx, opt_let_name)?;

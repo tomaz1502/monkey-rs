@@ -43,17 +43,22 @@ impl Stmt {
                 lctx.curr.insert(id.clone(), res);
                 EvalResult::Unit
             }
-            Stmt::Return(expr) => Expr::eval(expr, lctx),
-            Stmt::Expr(expr) => Expr::eval(expr, lctx),
-            Stmt::Block(block) => {
-                Block::eval(block, lctx)
+            Stmt::Return(expr)  => Expr::eval(expr, lctx),
+            Stmt::Expr(expr)    => Expr::eval(expr, lctx),
+            Stmt::Block(block)  => {
+                Block::eval_with_context(block, lctx)
             }
         }
     }
 }
 
 impl Block {
-    pub fn eval(&self, lctx: &mut LocalContext) -> EvalResult {
+    pub fn eval(&self) -> EvalResult {
+        let mut lctx = LocalContext { curr: HashMap::new(), parent: None };
+        self.eval_with_context(&mut lctx)
+    }
+
+    fn eval_with_context(&self, lctx: &mut LocalContext) -> EvalResult {
         let mut res = EvalResult::Unit;
         for stmt in self.stmts.iter() {
             res = stmt.eval(lctx);
@@ -75,11 +80,11 @@ impl Expr {
             }
             Expr::Ite(cond, t, opt_e) =>
                 match cond.eval(lctx) {
-                    EvalResult::Boolean(true) => Block::eval(t, lctx),
+                    EvalResult::Boolean(true) => Block::eval_with_context(t, lctx),
                     EvalResult::Boolean(false) => {
                         match opt_e {
                             None => EvalResult::Unit,
-                            Some(e) => Block::eval(e, lctx)
+                            Some(e) => Block::eval_with_context(e, lctx)
                         }
                     }
                     _ => unreachable!("[evaluator]: ITE without ground boolean condition")
@@ -104,7 +109,7 @@ impl Expr {
                         let f = EvalResult::Lambda(params, typ, body.clone());
                         new_map.insert(caller.to_string(), f);
                         let mut new_ctx = LocalContext { curr: new_map, parent: None };
-                        body.eval(&mut new_ctx)
+                        body.eval_with_context(&mut new_ctx)
                     },
                     Some(_) => unreachable!("[evaluator]: {caller} is not a function")
                 }

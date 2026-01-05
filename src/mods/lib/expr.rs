@@ -11,9 +11,9 @@ pub enum Type {
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_> ) -> fmt::Result {
         match self {
-            Type::Integer => write!(f, "int"),
-            Type::Boolean =>  write!(f, "bool"),
-            Type::Unit    =>  write!(f, "unit"),
+            Type::Integer       => write!(f, "int"),
+            Type::Boolean       => write!(f, "bool"),
+            Type::Unit          => write!(f, "unit"),
             Type::Arrow(t1, t2) => write!(f, "{} -> {}", t1, t2),
         }
     }
@@ -34,9 +34,9 @@ impl fmt::Display for Stmt {
         use Stmt::*;
         match self {
             Let(id, e) => write!(f, "let {} = {};", id, e),
-            Return(e) => write!(f, "return {};", e),
-            Expr(e) => write!(f, "{}", e),
-            Block(b) => write!(f, "{}", b),
+            Return(e)  => write!(f, "return {};", e),
+            Expr(e)    => write!(f, "{}", e),
+            Block(b)   => write!(f, "{}", b),
         }
     }
 }
@@ -63,7 +63,7 @@ impl fmt::Display for PrefixOperator {
         use PrefixOperator::*;
         match self {
             Minus => write!(f, "-"),
-            Bang => write!(f, "!"),
+            Bang  => write!(f, "!"),
         }
     }
 }
@@ -75,14 +75,14 @@ impl fmt::Display for InfixOperator {
     fn fmt(&self, f: &mut fmt::Formatter<'_> ) -> fmt::Result {
         use InfixOperator::*;
         match self {
-            Plus => write!(f, "+"),
+            Plus  => write!(f, "+"),
             Minus => write!(f, "-"),
-            Mult => write!(f, "*"),
-            Div => write!(f, "/"),
-            Eq => write!(f, "="),
-            Neq => write!(f, "!="),
-            LT => write!(f, "<"),
-            GT => write!(f, ">"),
+            Mult  => write!(f, "*"),
+            Div   => write!(f, "/"),
+            Eq    => write!(f, "=="),
+            Neq   => write!(f, "!="),
+            LT    => write!(f, "<"),
+            GT    => write!(f, ">"),
         }
     }
 }
@@ -103,18 +103,19 @@ impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_> ) -> fmt::Result {
         use Expr::*;
         match self {
-            Ident(name) => write!(f, "{}", name),
-            Integer(num) => write!(f, "{}", num),
-            Boolean(b) => write!(f, "{}", b),
-            Ite(cond, t, Some(e)) => write!(f, "if ({}) {{ {} }} else {{ {} }}", (*cond), t, e),
-            Ite(cond, t, None) => write!(f, "if ({}) {{ {} }}", (*cond), t),
+            Ident(name)               => write!(f, "{}", name),
+            Integer(num)              => write!(f, "{}", num),
+            Boolean(b)                => write!(f, "{}", b),
+            Ite(cond, t, Some(e))     => write!(f, "if ({}) {{ {} }} else {{ {} }}", (*cond), t, e),
+            Ite(cond, t, None)        => write!(f, "if ({}) {{ {} }}", (*cond), t),
             Lambda(params, ret, body) => {
-                let typed_ids = params.iter().map(|(id, typ)| id.to_owned() + ": " + &typ.to_string() ).collect::<Vec<_>>();
+                let typed_ids =
+                    params.iter().map(|(id, typ)| id.to_owned() + ": " + &typ.to_string()).collect::<Vec<_>>();
                 write!(f, "fn ({}) -> {} {{ {} }}", typed_ids.join(", "), ret, body)
             }
-            Call(name, args) => write!(f, "{}({})", name, args.iter().map(Expr::to_string).collect::<Vec<_>>().join(", ")),
-            PrefixOp(op, arg) => write!(f, "({}{})", op, arg),
-            InfixOp(op, lhs, rhs) => write!(f, "({} {} {})", lhs, op, rhs)
+            Call(name, args)          => write!(f, "{}({})", name, args.iter().map(Expr::to_string).collect::<Vec<_>>().join(", ")),
+            PrefixOp(op, arg)         => write!(f, "({}{})", op, arg),
+            InfixOp(op, lhs, rhs)     => write!(f, "({} {} {})", lhs, op, rhs)
         }
     }
 }
