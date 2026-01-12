@@ -1,8 +1,6 @@
 use crate::mods::lib::expr::*;
 
 use std::collections::HashMap;
-use std::rc::Rc;
-use std::cell::RefCell;
 
 #[derive(Clone, Debug)]
 pub enum EvalResult {
@@ -14,166 +12,162 @@ pub enum EvalResult {
 }
 
 #[derive(Clone)]
-pub struct LocalContext {
-    pub curr: HashMap<Id, EvalResult>,
-    pub parent: Option<Rc<RefCell<LocalContext>>>,
+pub struct Context {
+    pub bindings_stack: Vec<HashMap<Id, EvalResult>>,
 }
 
-impl LocalContext {
-    fn search(&self, id: &Id) -> Option<EvalResult> {
-        if let Some(er) = self.curr.get(id) {
-            Some(er.clone())
-        } else if let Some(par) = &self.parent {
-            par.borrow().search(id)
-        } else {
-            None
-        }
+impl Context {
+    pub fn new() -> Self {
+        Context { bindings_stack: vec![] }
     }
 
-    pub fn stack(s: Rc<RefCell<LocalContext>>) -> Self {
-        LocalContext { curr: HashMap::new(), parent: Some(s) }
-    }
-}
-
-impl Stmt {
-    fn eval(&self, lctx: &mut LocalContext) -> EvalResult {
-        match self {
-            Stmt::Let(id, expr) => {
-                let res = expr.eval(lctx);
-                lctx.curr.insert(id.clone(), res);
-                EvalResult::Unit
-            }
-            Stmt::Return(expr)  => expr.eval(lctx),
-            Stmt::Expr(expr)    => expr.eval(lctx),
-            Stmt::Block(block)  => {
-                Block::eval_ctx(block, lctx)
+    fn lookup(&self, id: &Id) -> Option<EvalResult> {
+        for i in (0..self.bindings_stack.len()).rev() {
+            if let Some(t) = self.bindings_stack[i].get(id) {
+                return Some(t.clone());
             }
         }
-    }
-}
-
-impl Block {
-    pub fn eval(&self) -> EvalResult {
-        let mut lctx = LocalContext { curr: HashMap::new(), parent: None };
-        self.eval_ctx(&mut lctx)
+        None
     }
 
-    fn eval_ctx(&self, lctx: &mut LocalContext) -> EvalResult {
-        let mut res = EvalResult::Unit;
-        for stmt in self.stmts.iter() {
-            res = stmt.eval(lctx);
+    pub fn scope_eval(&mut self, bindings: Vec<(Id, EvalResult)>, block: &Block) -> Option<EvalResult> {
+        let mut cur_bindings = HashMap::new();
+        for (id, typ) in bindings {
+            cur_bindings.insert(id, typ);
         }
+        self.bindings_stack.push(cur_bindings);
+        let mut res = Some(EvalResult::Unit);
+        for stmt in &block.stmts {
+            res = self.eval(stmt);
+        }
+        self.bindings_stack.pop();
         res
     }
 }
 
-impl Expr {
-    fn eval(&self, lctx: &mut LocalContext) -> EvalResult {
-        match self {
-            Expr::Integer(i) => EvalResult::Integer(*i),
-            Expr::Boolean(b) => EvalResult::Boolean(*b),
-            Expr::Ident(id) => {
-                match lctx.search(id) {
-                    None => unreachable!("[evaluator]: identifier not found"),
-                    Some(v) => v.clone(),
-                }
+pub trait Evaluate<T> {
+    fn eval(&mut self, t: &T) -> Option<EvalResult>;
+}
+
+impl Evaluate<Stmt> for Context {
+    fn eval(&mut self, stmt: &Stmt) -> Option<EvalResult> {
+        match stmt {
+            Stmt::Let(id, expr) => {
+                let res = self.eval(expr)?;
+                self
+                  .bindings_stack
+                  .last_mut()
+                  .expect("let without a context")
+                  .insert(id.clone(), res);
+                Some(EvalResult::Unit)
             }
+            Stmt::Return(expr)  => self.eval(expr),
+            Stmt::Expr(expr)    => self.eval(expr),
+            Stmt::Block(block)  => {
+                self.scope_eval(vec![], block)
+            }
+        }
+    }
+}
+
+impl Evaluate<Expr> for Context {
+    fn eval(&mut self, expr: &Expr) -> Option<EvalResult> {
+        match expr {
+            Expr::Integer(i) => Some(EvalResult::Integer(*i)),
+            Expr::Boolean(b) => Some(EvalResult::Boolean(*b)),
+            Expr::Ident(id) => self.lookup(id),
             Expr::Ite(cond, t, opt_e) =>
-                match cond.eval(lctx) {
-                    EvalResult::Boolean(true) => Block::eval_ctx(t, lctx),
+                match self.eval(&**cond)? {
+                    EvalResult::Boolean(true) => self.scope_eval(vec![], t),
                     EvalResult::Boolean(false) => {
                         match opt_e {
-                            None => EvalResult::Unit,
-                            Some(e) => Block::eval_ctx(e, lctx)
+                            None => Some(EvalResult::Unit),
+                            Some(e) => self.scope_eval(vec![], e),
                         }
                     }
-                    _ => unreachable!("[evaluator]: ITE without ground boolean condition")
+                    _ => None,
                 },
-            Expr::Lambda(params, ret, body) => EvalResult::Lambda(params.clone(), ret.clone(), body.clone()),
+            Expr::Lambda(params, ret, body) => Some(EvalResult::Lambda(params.clone(), ret.clone(), body.clone())),
             Expr::Call(caller, args) => {
-                match lctx.search(caller) {
-                    None => unreachable!("[evaluator]: unknown symbol {caller}"),
-                    Some(EvalResult::Lambda(params, typ, body)) => {
+                match self.lookup(caller) {
+                    None => None,
+                    Some(EvalResult::Lambda(params, _, body)) => {
                         let mut evaluated_args = vec![];
                         for arg in args.iter() {
-                            let lctx_cln = lctx.clone().into();
-                            let mut new_ctx = LocalContext::stack(Rc::new(lctx_cln));
-                            let evaluated_arg = arg.eval(&mut new_ctx);
+                            let evaluated_arg = self.eval(arg)?;
                             evaluated_args.push(evaluated_arg);
                         }
-                        let mut new_map : HashMap<Id, EvalResult> = HashMap::new();
+                        // NOTE: `caller` is already there
+                        let mut cur_bindings = vec![];
                         for (i, arg) in evaluated_args.into_iter().enumerate() {
                             let id = params[i].0.clone();
-                            new_map.insert(id, arg);
+                            cur_bindings.push((id, arg));
                         }
-                        let f = EvalResult::Lambda(params, typ, body.clone());
-                        new_map.insert(caller.to_string(), f);
-                        let mut new_ctx = LocalContext { curr: new_map, parent: None };
-                        body.eval_ctx(&mut new_ctx)
+                        self.scope_eval(cur_bindings, &body)
                     },
-                    Some(_) => unreachable!("[evaluator]: {caller} is not a function")
+                    Some(_) => None,
                 }
             },
             Expr::PrefixOp(PrefixOperator::Bang, b_) => {
-                match b_.eval(lctx) {
-                    EvalResult::Boolean(b) => EvalResult::Boolean(!b),
-                    _ => unreachable!("[evaluator]: !b, where b is not bool"),
+                match self.eval(&**b_)? {
+                    EvalResult::Boolean(b) => Some(EvalResult::Boolean(!b)),
+                    _ => None,
                 }
             },
             Expr::PrefixOp(PrefixOperator::Minus, n_) => {
-                match n_.eval(lctx) {
-                    EvalResult::Integer(n) => EvalResult::Integer(-n),
-                    _ => unreachable!("[evaluator]: -n, where n is not int"),
+                match self.eval(&**n_)? {
+                    EvalResult::Integer(n) => Some(EvalResult::Integer(-n)),
+                    _ => None,
                 }
             },
             Expr::InfixOp(InfixOperator::Plus, n_, m_) => {
-                match (n_.eval(lctx), m_.eval(lctx)) {
-                    (EvalResult::Integer(n), EvalResult::Integer(m)) => EvalResult::Integer(n + m),
-                    _ => unreachable!("[evaluator]: n + m where n and m are not both int"),
+                match (self.eval(&**n_)?, self.eval(&**m_)?) {
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Some(EvalResult::Integer(n + m)),
+                    _ => None,
                 }
             },
             Expr::InfixOp(InfixOperator::Minus, n_, m_) => {
-                match (n_.eval(lctx), m_.eval(lctx)) {
-                    (EvalResult::Integer(n), EvalResult::Integer(m)) => EvalResult::Integer(n - m),
-                    _ => unreachable!("[evaluator]: n - m where n and m are not both int"),
+                match (self.eval(&**n_)?, self.eval(&**m_)?) {
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Some(EvalResult::Integer(n - m)),
+                    _ => None,
                 }
             },
             Expr::InfixOp(InfixOperator::Mult, n_, m_) => {
-                match (n_.eval(lctx), m_.eval(lctx)) {
-                    (EvalResult::Integer(n), EvalResult::Integer(m)) => EvalResult::Integer(n * m),
-                    _ => unreachable!("[evaluator]: n * m where n and m are not both int"),
+                match (self.eval(&**n_)?, self.eval(&**m_)?) {
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Some(EvalResult::Integer(n * m)),
+                    _ => None,
                 }
             },
             Expr::InfixOp(InfixOperator::Div, n_, m_) => {
-                match (n_.eval(lctx), m_.eval(lctx)) {
-                    (EvalResult::Integer(n), EvalResult::Integer(m)) => EvalResult::Integer(n / m),
-                    _ => unreachable!("[evaluator]: n / m where n and m are not both int"),
+                match (self.eval(&**n_)?, self.eval(&**m_)?) {
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Some(EvalResult::Integer(n / m)),
+                    _ => None,
                 }
             },
             Expr::InfixOp(InfixOperator::LT, n_, m_) => {
-                match (n_.eval(lctx), m_.eval(lctx)) {
-                    (EvalResult::Integer(n), EvalResult::Integer(m)) => EvalResult::Boolean(n < m),
-                    _ => unreachable!("[evaluator]: n < m where n and m are not both int"),
+                match (self.eval(&**n_)?, self.eval(&**m_)?) {
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Some(EvalResult::Boolean(n < m)),
+                    _ => None,
                 }
             },
             Expr::InfixOp(InfixOperator::GT, n_, m_) => {
-                match (n_.eval(lctx), m_.eval(lctx)) {
-                    (EvalResult::Integer(n), EvalResult::Integer(m)) => EvalResult::Boolean(n > m),
-                    _ => unreachable!("[evaluator]: n > m where n and m are not both int"),
+                match (self.eval(&**n_)?, self.eval(&**m_)?) {
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Some(EvalResult::Boolean(n > m)),
+                    _ => None,
                 }
             },
             Expr::InfixOp(InfixOperator::Eq, n_, m_) => {
-                match (n_.eval(lctx), m_.eval(lctx)) {
-                    (EvalResult::Integer(n), EvalResult::Integer(m)) => EvalResult::Boolean(n == m),
-                    (EvalResult::Boolean(n), EvalResult::Boolean(m)) => EvalResult::Boolean(n == m),
-                    _ => unreachable!("[evaluator]: n == m, where n and m are not both int or bool"),
+                match (self.eval(&**n_)?, self.eval(&**m_)?) {
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Some(EvalResult::Boolean(n == m)),
+                    (EvalResult::Boolean(n), EvalResult::Boolean(m)) => Some(EvalResult::Boolean(n == m)),
+                    _ => None,
                 }
             },
             Expr::InfixOp(InfixOperator::Neq, n_, m_) => {
-                match (n_.eval(lctx), m_.eval(lctx)) {
-                    (EvalResult::Integer(n), EvalResult::Integer(m)) => EvalResult::Boolean(n != m),
-                    (EvalResult::Boolean(n), EvalResult::Boolean(m)) => EvalResult::Boolean(n != m),
-                    _ => unreachable!("[evaluator]: n != m, where n and m are not both int or bool"),
+                match (self.eval(&**n_)?, self.eval(&**m_)?) {
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Some(EvalResult::Boolean(n != m)),
+                    (EvalResult::Boolean(n), EvalResult::Boolean(m)) => Some(EvalResult::Boolean(n != m)),
+                    _ => None,
                 }
             },
         }
