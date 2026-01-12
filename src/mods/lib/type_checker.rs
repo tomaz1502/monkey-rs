@@ -31,9 +31,12 @@ impl Context {
             cur_bindings.insert(id, typ);
         }
         self.bindings_stack.push(cur_bindings);
-        let ot = self.tc(block);
+        let mut typ = Some(Type::Unit);
+        for stmt in &block.stmts {
+            typ = self.tc(stmt);
+        }
         self.bindings_stack.pop();
-        ot
+        typ
     }
 }
 
@@ -59,16 +62,6 @@ impl TypeCheck<Stmt> for Context {
             Stmt::Return(expr) => self.tc(expr),
             Stmt::Block(block) => self.scope_tc(vec![], block),
         }
-    }
-}
-
-impl TypeCheck<Block> for Context {
-    fn tc(&mut self, block: &Block) -> Option<Type> {
-        let mut typ = Some(Type::Unit);
-        for stmt in &block.stmts {
-            typ = self.tc(stmt);
-        }
-        typ
     }
 }
 
