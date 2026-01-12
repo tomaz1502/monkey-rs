@@ -223,10 +223,10 @@ impl Parser {
 
     fn token_to_basic_type(tk: &lexer::Token) -> Result<Type, ParseError> {
         match tk {
-            Int => Ok(Type::Integer),
+            Int  => Ok(Type::Integer),
             Bool => Ok(Type::Boolean),
             Unit => Ok(Type::Unit),
-            _ => Err(ParseError::UnexpectedToken)
+            _    => Err(ParseError::UnexpectedToken)
         }
     }
 

@@ -6,6 +6,8 @@ use std::process;
 use io::{Write, BufRead};
 
 use mods::lib::parser;
+use mods::lib::type_checker;
+use mods::lib::type_checker::TypeCheck;
 
 mod mods;
 
@@ -38,19 +40,21 @@ fn repl() -> io::Result<()> {
 
 fn interpret_file(file_path: &str) -> io::Result<()> {
     let source_code = get_text(file_path)?;
+    let mut ctx = type_checker::Context::new();
     match parser::Parser::parse(source_code) {
         Ok(prog) => {
-            let opt_typ = prog.tc();
+            let opt_typ = ctx.scope_tc(vec![], &prog);
             match opt_typ {
                 None => println!("Typing error."),
-                Some(typ) => {
-                    println!("\n--------------------------------------------------------\n");
-                    println!("AST: {:?}", prog);
-                    println!("\n--------------------------------------------------------\n");
-                    println!("TYPE: {:?}", typ);
-                    let res = prog.eval();
-                    println!("\n--------------------------------------------------------\n");
-                    println!("RESULT: {:?}", res)
+                Some(_typ) => {
+                    println!("Typing OK.");
+                    // println!("\n--------------------------------------------------------\n");
+                    // println!("AST: {:?}", prog);
+                    // println!("\n--------------------------------------------------------\n");
+                    // println!("TYPE: {:?}", typ);
+                    // println!("\n--------------------------------------------------------\n");
+                    // let res = prog.eval();
+                    // println!("RESULT: {:?}", res)
                 }
             }
         }
