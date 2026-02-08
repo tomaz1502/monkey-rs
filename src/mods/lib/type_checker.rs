@@ -21,6 +21,7 @@ impl Context {
         let builtins = HashMap::from([
             ("print".to_string(), Type::Arrow(Box::new(Type::Str), Box::new(Type::Unit))),
             ("read".to_string(), Type::Arrow(Box::new(Type::Unit), Box::new(Type::Str))),
+            ("len".to_string(), Type::Arrow(Box::new(Type::Str), Box::new(Type::Integer))),
         ]);
         Context { builtins, bindings_stack: vec![], curr_let_def: None }
     }

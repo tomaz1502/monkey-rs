@@ -126,6 +126,15 @@ impl Evaluate<Expr> for Context {
                                 std::io::stdin().read_line(&mut s).unwrap();
                                 Some(EvalResult::Str(s))
                             }
+                            "len" => {
+                                let evaluated_args = args.iter().map(|arg| self.eval(arg)).collect::<Option<Vec<_>>>()?;
+                                match &evaluated_args[..] {
+                                    [EvalResult::Str(s)] => {
+                                        Some(EvalResult::Integer(s.len() as i64))
+                                    },
+                                    _ => unreachable!("impossible (TC)")
+                                }
+                            }
                             _ => {
                                 match self.lookup(caller) {
                                     Some(EvalResult::Lambda(params, _, body)) => {
