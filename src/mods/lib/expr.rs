@@ -101,7 +101,7 @@ pub enum Expr {
     Unit,
     Ite(Box<Expr>, Block, Option<Block>),
     Lambda(Vec<(Id, Type)>, Type, Block),
-    Call(Id, Vec<Expr>), // TODO: should accept any expression as the caller
+    Call(Box<Expr>, Vec<Expr>), // TODO: should accept any expression as the caller
     PrefixOp(PrefixOperator, Box<Expr>),
     InfixOp(InfixOperator, Box<Expr>, Box<Expr>)
 }

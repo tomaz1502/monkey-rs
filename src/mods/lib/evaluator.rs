@@ -96,28 +96,9 @@ impl Evaluate<Expr> for Context {
                 },
             Expr::Lambda(params, ret, body) => Some(EvalResult::Lambda(params.clone(), ret.clone(), body.clone())),
             Expr::Call(caller, args) => {
-                match self.lookup(caller) {
-                    None => {
-                        match &caller[..] {
-                            "print" => {
-                                let evaluated_args = args.iter().map(|arg| self.eval(arg)).collect::<Option<Vec<_>>>()?;
-                                match &evaluated_args[..] {
-                                    [EvalResult::Str(s)] => {
-                                        print!("{}", s);
-                                        Some(EvalResult::Unit)
-                                    },
-                                    _ => unreachable!("impossible (TC)")
-                                }
-                            },
-                            "read" => {
-                                let mut s = String::new();
-                                std::io::stdin().read_line(&mut s).unwrap();
-                                Some(EvalResult::Str(s))
-                            }
-                            _ => None,
-                        }
-                    }
-                    Some(EvalResult::Lambda(params, _, body)) => {
+                match &**caller {
+                    Expr::Lambda(params, _, body) => {
+                        // TODO: abstract this code
                         let evaluated_args = args.iter().map(|arg| self.eval(arg)).collect::<Option<Vec<_>>>()?;
                         // NOTE: `caller` is already there
                         // NOTE: No need to check arity since we already type checked
@@ -127,8 +108,22 @@ impl Evaluate<Expr> for Context {
                             cur_bindings.push((id, arg));
                         }
                         self.scope_eval(cur_bindings, &body)
-                    },
-                    Some(_) => None,
+                    }
+                    Expr::Ident(caller) => {
+                        match self.lookup(caller) {
+                            Some(EvalResult::Lambda(params, _, body)) => {
+                                let evaluated_args = args.iter().map(|arg| self.eval(arg)).collect::<Option<Vec<_>>>()?;
+                                let mut cur_bindings = vec![];
+                                for (i, arg) in evaluated_args.into_iter().enumerate() {
+                                    let id = params[i].0.clone();
+                                    cur_bindings.push((id, arg));
+                                }
+                                self.scope_eval(cur_bindings, &body)
+                            },
+                            _ => None
+                        }
+                    }
+                    _ => None
                 }
             },
             Expr::PrefixOp(PrefixOperator::Bang, b_) => {

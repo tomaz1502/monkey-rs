@@ -20,6 +20,7 @@ expr ::=
     | <integer>
     | <boolean>
     | <char>
+    | <sting>
     | "if" "(" <expr> ")"  <block>
     | "if" "(" <expr> ")"  <block> "else" <block>
     | "fn" "(" <comma_separated_typed_names> ")" "->" <type> <block>
@@ -277,11 +278,7 @@ impl Parser {
         Ok(Expr::Lambda(params, ret, body))
     }
 
-    fn parse_call(&mut self, f_id: Expr) -> Result<Expr, ParseError> {
-        let f_id_str = match f_id {
-            Expr::Ident(id) => id,
-            _ => unreachable!()
-        };
+    fn parse_call(&mut self, f: Expr) -> Result<Expr, ParseError> {
         self.advance_token()?;
         let mut args = vec![];
         while self.curr_token != RPar {
@@ -298,7 +295,7 @@ impl Parser {
         }
         self.expect_token(RPar)?;
         self.advance_token()?;
-        Ok(Expr::Call(f_id_str, args))
+        Ok(Expr::Call(Box::new(f), args))
     }
 
     fn parse_int(&mut self) -> Result<Expr, ParseError> {

@@ -157,7 +157,7 @@ impl TypeCheck<Expr> for Context {
                 }
             }
             Expr::Call(caller, args) => {
-                let caller_type = self.lookup_full(caller)?;
+                let caller_type = self.tc(&**caller)?;
                 let mut arg_types = vec![];
                 for arg in args {
                     arg_types.push(self.tc(arg)?);
