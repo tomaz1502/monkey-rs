@@ -8,6 +8,7 @@ pub enum EvalResult {
     Integer(i64),
     Boolean(bool),
     Char(char),
+    Str(String),
     Unit,
     #[allow(dead_code)] // We keep the types for pretty printing
     Lambda(Vec<(Id, Type)>, Type, Block),
@@ -78,6 +79,7 @@ impl Evaluate<Expr> for Context {
             Expr::Integer(i) => Some(EvalResult::Integer(*i)),
             Expr::Boolean(b) => Some(EvalResult::Boolean(*b)),
             Expr::Char(c)    => Some(EvalResult::Char(*c)),
+            Expr::Str(s)     => Some(EvalResult::Str(s.clone())),
             Expr::Ident(id) => self.lookup(id),
             Expr::Ite(cond, t, opt_e) =>
                 match self.eval(&**cond)? {

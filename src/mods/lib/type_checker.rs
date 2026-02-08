@@ -3,6 +3,8 @@ use crate::mods::lib::expr::*;
 
 use std::collections::HashMap;
 
+static EQUALITY_TYPES: [Type; 3] = [Type::Integer, Type::Boolean, Type::Char];
+
 pub struct Context {
     bindings_stack: Vec<HashMap<Id, Type>>,
     // This represents the current name that is being defined via a `let`.
@@ -107,6 +109,7 @@ impl TypeCheck<Expr> for Context {
             Expr::Integer(_) => Some(Type::Integer),
             Expr::Boolean(_) => Some(Type::Boolean),
             Expr::Char(_)    => Some(Type::Char),
+            Expr::Str(_)    => Some(Type::Str),
             Expr::Lambda(params, ret, body) => {
                 let expected_type = Expr::build_arrow(params, ret);
                 let mut scoped_bindings = params.clone();
@@ -153,7 +156,11 @@ impl TypeCheck<Expr> for Context {
                 let te1 = self.tc(&**e1)?;
                 let te2 = self.tc(&**e2)?;
                 if te1 == te2 {
-                    Some(Type::Boolean)
+                    if EQUALITY_TYPES.contains(&te1) {
+                        Some(Type::Boolean)
+                    } else {
+                        None // NOTE: Give a different typing error here then in the other branch
+                    }
                 } else {
                     None
                 }

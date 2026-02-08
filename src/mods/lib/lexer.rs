@@ -4,9 +4,10 @@ use std::hash::Hasher;
 #[repr(u8)]
 pub enum Token {
     // Identifiers and literals
-    Id(String),
-    Int(i64),
-    Char(char),
+    Identifier(String),
+    IntLit(i64),
+    CharLit(char),
+    StrLit(String),
 
     // Delimeters
     LPar,
@@ -40,10 +41,11 @@ pub enum Token {
 
     // Types
     IntType,
-    Bool,
+    BoolType,
     CharType,
-    Unit,
-    Arrow,
+    StrType,
+    UnitType,
+    ArrowType,
 
     // EOF
     Eof
@@ -81,6 +83,7 @@ pub struct Lexer {
     ptr: usize
 }
 
+// NOTE: why aren't you using self?
 impl Lexer {
     pub fn new(input: String) -> Self {
         Lexer { input: input.as_bytes().to_vec(), ptr: 0 }
@@ -147,7 +150,7 @@ impl Lexer {
             '-' => {
                 if Self::peek(input, ptr) == Some('>') {
                     Self::read_char(input, ptr);
-                    Ok(Arrow)
+                    Ok(ArrowType)
                 } else {
                     Ok(Minus)
                 }
@@ -164,6 +167,7 @@ impl Lexer {
                 }
             },
             '/' => Ok(Slash),
+            // TODO: Don't accept line break inside single or double quote
             '\'' => {
                 // TODO: `c` must be escaped if necessary
                 let c = Self::read_char(input, ptr).ok_or(UnclosedQuote)?;
@@ -171,9 +175,14 @@ impl Lexer {
                 if q != '\'' {
                     Err(SingleQuoteString)
                 } else {
-                    Ok(Char(c))
+                    Ok(CharLit(c))
                 }
             }
+            '\"' => {
+                let s = Self::read_while(input, ptr, |b: u8| { b != b'\"' });
+                let _ = Self::read_char(input, ptr);
+                Ok(StrLit(s))
+            },
             'a'..='z' | 'A'..='Z' | '_' => {
                 let rest = Self::read_while(input, ptr, |b: u8| { b.is_ascii_alphanumeric() || b == b'_' });
                 let word = String::from(ch) + &rest;
@@ -186,17 +195,18 @@ impl Lexer {
                     "if"     => Ok(If),
                     "else"   => Ok(Else),
                     "int"    => Ok(IntType),
-                    "bool"   => Ok(Bool),
+                    "bool"   => Ok(BoolType),
                     "char"   => Ok(CharType),
-                    "unit"   => Ok(Unit),
-                    _        => Ok(Id(word))
+                    "string" => Ok(StrType),
+                    "unit"   => Ok(UnitType),
+                    _        => Ok(Identifier(word))
                 }
             }
             '0'..='9' => {
                 let rest = Self::read_while(input, ptr, |b| { (b as char).is_numeric() });
                 let num_str = String::from(ch) + &rest;
                 match num_str.parse::<i64>() {
-                    Ok(num) => Ok(Int(num)),
+                    Ok(num) => Ok(IntLit(num)),
                     Err(_) => Err(UnrecognizedToken) // TODO: Create a token error for this
                 }
             }
@@ -220,6 +230,7 @@ mod tests {
     fn tokenize_simple_program() {
         let program = "
             let dummy = 'a';
+            let dummy_str = \"foo\";
             let five = 5;
             let ten = 10;
             let add = fn(x, y) {
@@ -239,14 +250,15 @@ mod tests {
         }
         println!("{:?}", tokens);
         assert!(tokens ==
-          [Let, Id("dummy".to_string()), Assign, Char('a'), Semicolon,
-           Let, Id("five".to_string()), Assign, Int(5), Semicolon, Let,
-           Id("ten".to_string()), Assign, Int(10), Semicolon, Let,
-           Id("add".to_string()), Assign, Fn, LPar, Id("x".to_string()),
-           Comma, Id("y".to_string()), RPar, LBrack, Id("x".to_string()), Plus,
-           Id("y".to_string()), Mult, Int(3), Semicolon, RBrack, Semicolon, Let,
-           Id("result".to_string()), Assign, Id("add".to_string()),
-           LPar, Id("five".to_string()), Comma, Id("ten".to_string()),
+          [Let, Identifier("dummy".to_string()), Assign, CharLit('a'), Semicolon,
+           Let, Identifier("dummy_str".to_string()), Assign, StrLit("foo".to_string()), Semicolon,
+           Let, Identifier("five".to_string()), Assign, IntLit(5), Semicolon, Let,
+           Identifier("ten".to_string()), Assign, IntLit(10), Semicolon, Let,
+           Identifier("add".to_string()), Assign, Fn, LPar, Identifier("x".to_string()),
+           Comma, Identifier("y".to_string()), RPar, LBrack, Identifier("x".to_string()), Plus,
+           Identifier("y".to_string()), Mult, IntLit(3), Semicolon, RBrack, Semicolon, Let,
+           Identifier("result".to_string()), Assign, Identifier("add".to_string()),
+           LPar, Identifier("five".to_string()), Comma, Identifier("ten".to_string()),
            RPar, Semicolon
           ]);
     }

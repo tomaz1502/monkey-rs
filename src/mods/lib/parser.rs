@@ -147,9 +147,10 @@ impl Parser {
         let curr_token = lexer.get_next_token()?;
         let mut parser =
             Parser { curr_token, lexer, prefix_fn_map: HashMap::new(), infix_fn_map: HashMap::new() };
-        parser.register_prefix_fn(lexer::Token::Id("".to_string()), Self::parse_id_expr);
-        parser.register_prefix_fn(lexer::Token::Int(0), Self::parse_int);
-        parser.register_prefix_fn(lexer::Token::Char('a'), Self::parse_char);
+        parser.register_prefix_fn(lexer::Token::Identifier("".to_string()), Self::parse_id_expr);
+        parser.register_prefix_fn(lexer::Token::IntLit(0), Self::parse_int);
+        parser.register_prefix_fn(lexer::Token::CharLit('a'), Self::parse_char);
+        parser.register_prefix_fn(lexer::Token::StrLit("".to_string()), Self::parse_string);
         parser.register_prefix_fn(lexer::Token::Bang, Self::parse_prefix_op);
         parser.register_prefix_fn(lexer::Token::Minus, Self::parse_prefix_op);
         parser.register_prefix_fn(lexer::Token::True, Self::parse_bool);
@@ -230,8 +231,8 @@ impl Parser {
         match tk {
             IntType  => Ok(Type::Integer),
             CharType => Ok(Type::Char),
-            Bool => Ok(Type::Boolean),
-            Unit => Ok(Type::Unit),
+            BoolType => Ok(Type::Boolean),
+            UnitType => Ok(Type::Unit),
             _    => Err(ParseError::UnexpectedToken)
         }
     }
@@ -240,7 +241,7 @@ impl Parser {
     fn parse_type(&mut self) -> Result<Type, ParseError> {
         let first_type = Self::token_to_basic_type(&self.curr_token)?;
         self.advance_token()?;
-        if self.curr_token == Arrow {
+        if self.curr_token == ArrowType {
             self.advance_token()?;
             let arrow_tail = self.parse_type()?;
             Ok(Type::Arrow(Box::new(first_type), Box::new(arrow_tail)))
@@ -254,7 +255,7 @@ impl Parser {
         self.expect_token(LPar)?;
         self.advance_token()?;
         let mut params = vec![];
-        while let Id(id) = self.curr_token.clone() {
+        while let Identifier(id) = self.curr_token.clone() {
             self.advance_token()?;
             self.expect_token(Colon)?;
             self.advance_token()?;
@@ -268,7 +269,7 @@ impl Parser {
         }
         self.expect_token(RPar)?;
         self.advance_token()?;
-        self.expect_token(Arrow)?;
+        self.expect_token(ArrowType)?;
         self.advance_token()?;
         let ret = self.parse_type()?;
         let body = self.parse_block()?;
@@ -299,7 +300,7 @@ impl Parser {
     fn parse_int(&mut self) -> Result<Expr, ParseError> {
         // This check looks redundant
         match self.curr_token {
-            Int(num) => {
+            IntLit(num) => {
                 self.advance_token()?;
                 Ok(Expr::Integer(num))
             }
@@ -310,12 +311,24 @@ impl Parser {
     fn parse_char(&mut self) -> Result<Expr, ParseError> {
         // This check looks redundant
         match self.curr_token {
-            Char(c) => {
+            CharLit(c) => {
                 self.advance_token()?;
                 Ok(Expr::Char(c))
             }
             _ => Err(ParseError::UnexpectedToken)
         }
+    }
+
+    fn parse_string(&mut self) -> Result<Expr, ParseError> {
+        let mut answer = Err(ParseError::UnexpectedToken);
+        match self.curr_token {
+            StrLit(ref s) => {
+                answer = Ok(Expr::Str(s.clone()));
+            }
+            _ => {},
+        }
+        self.advance_token()?;
+        return answer;
     }
 
     /* We should have a single function parse literal for integer and bool and string */
@@ -335,7 +348,7 @@ impl Parser {
 
     fn parse_id_expr(&mut self) -> Result<Expr, ParseError> {
         match &self.curr_token {
-            Id(name) => {
+            Identifier(name) => {
                 let name_cln = name.clone();
                 self.advance_token()?;
                 Ok(Expr::Ident(name_cln))
@@ -346,7 +359,7 @@ impl Parser {
 
     fn parse_id(&mut self) -> Result<String, ParseError> {
         match &self.curr_token {
-            Id(name) => {
+            Identifier(name) => {
                 let name_cln = name.clone();
                 self.advance_token()?;
                 Ok(name_cln)
@@ -575,6 +588,22 @@ mod tests {
         struct TestCase { input: &'static str, parsed_pp: &'static str }
         let cases = [
             TestCase { input: "let foo = 'a';", parsed_pp: "let foo = 'a';"},
+        ];
+        for case in cases {
+            if let Ok(prog) = Parser::parse(case.input.to_string()) {
+                assert_eq!(prog.stmts.len(), 1);
+                assert_eq!(prog.stmts[0].to_string(), case.parsed_pp);
+            } else {
+                panic!("Parser failed!");
+            }
+        }
+    }
+
+    #[test]
+    fn parse_let_string() {
+        struct TestCase { input: &'static str, parsed_pp: &'static str }
+        let cases = [
+            TestCase { input: "let foo = \"foobar\";", parsed_pp: "let foo = \"foobar\";"},
         ];
         for case in cases {
             if let Ok(prog) = Parser::parse(case.input.to_string()) {
