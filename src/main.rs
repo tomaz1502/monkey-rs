@@ -8,6 +8,8 @@ use io::{Write, BufRead};
 use mods::lib::parser;
 use mods::lib::type_checker;
 use mods::lib::type_checker::TypeCheck;
+use mods::lib::evaluator;
+use mods::lib::evaluator::Evaluate;
 
 mod mods;
 
@@ -42,19 +44,20 @@ fn interpret_file(file_path: &str) -> io::Result<()> {
     let source_code = get_text(file_path)?;
     let mut ctx = type_checker::Context::new();
     match parser::Parser::parse(source_code) {
-        Ok(prog) => {
-            let opt_typ = ctx.scope_tc(vec![], &prog);
+        Ok(mut prog) => {
+            let opt_typ = ctx.tc(&prog);
             match opt_typ {
                 None => println!("Typing error."),
-                Some(_typ) => {
+                Some(typ) => {
                     println!("Typing OK.");
-                    // println!("\n--------------------------------------------------------\n");
-                    // println!("AST: {:?}", prog);
-                    // println!("\n--------------------------------------------------------\n");
-                    // println!("TYPE: {:?}", typ);
-                    // println!("\n--------------------------------------------------------\n");
-                    // let res = prog.eval();
-                    // println!("RESULT: {:?}", res)
+                    println!("\n--------------------------------------------------------\n");
+                    println!("AST: {:?}", prog);
+                    println!("\n--------------------------------------------------------\n");
+                    println!("TYPE: {:?}", typ);
+                    println!("\n--------------------------------------------------------\n");
+                    let mut ev_ctx = evaluator::Context::new();
+                    let res = ev_ctx.eval(&mut prog);
+                    println!("RESULT: {:?}", res)
                 }
             }
         }

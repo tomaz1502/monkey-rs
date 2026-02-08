@@ -2,10 +2,12 @@ use crate::mods::lib::expr::*;
 
 use std::collections::HashMap;
 
+// Normalized exprs
 #[derive(Clone, Debug)]
 pub enum EvalResult {
     Integer(i64),
     Boolean(bool),
+    Char(char),
     Unit,
     #[allow(dead_code)] // We keep the types for pretty printing
     Lambda(Vec<(Id, Type)>, Type, Block),
@@ -75,6 +77,7 @@ impl Evaluate<Expr> for Context {
         match expr {
             Expr::Integer(i) => Some(EvalResult::Integer(*i)),
             Expr::Boolean(b) => Some(EvalResult::Boolean(*b)),
+            Expr::Char(c)    => Some(EvalResult::Char(*c)),
             Expr::Ident(id) => self.lookup(id),
             Expr::Ite(cond, t, opt_e) =>
                 match self.eval(&**cond)? {
@@ -160,6 +163,7 @@ impl Evaluate<Expr> for Context {
                 match (self.eval(&**n_)?, self.eval(&**m_)?) {
                     (EvalResult::Integer(n), EvalResult::Integer(m)) => Some(EvalResult::Boolean(n == m)),
                     (EvalResult::Boolean(n), EvalResult::Boolean(m)) => Some(EvalResult::Boolean(n == m)),
+                    (EvalResult::Char(n), EvalResult::Char(m))       => Some(EvalResult::Boolean(n == m)),
                     _ => None,
                 }
             },
@@ -167,9 +171,21 @@ impl Evaluate<Expr> for Context {
                 match (self.eval(&**n_)?, self.eval(&**m_)?) {
                     (EvalResult::Integer(n), EvalResult::Integer(m)) => Some(EvalResult::Boolean(n != m)),
                     (EvalResult::Boolean(n), EvalResult::Boolean(m)) => Some(EvalResult::Boolean(n != m)),
+                    (EvalResult::Char(n), EvalResult::Char(m))       => Some(EvalResult::Boolean(n != m)),
                     _ => None,
                 }
             },
         }
     }
+}
+
+impl Evaluate<Block> for Context {
+    fn eval(&mut self, b: &Block) -> Option<EvalResult> {
+        self.scope_eval(vec![], b)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // TODO
 }

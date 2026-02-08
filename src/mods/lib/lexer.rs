@@ -5,7 +5,8 @@ use std::hash::Hasher;
 pub enum Token {
     // Identifiers and literals
     Id(String),
-    Integer(i64),
+    Int(i64),
+    Char(char),
 
     // Delimeters
     LPar,
@@ -38,8 +39,9 @@ pub enum Token {
     False,
 
     // Types
-    Int,
+    IntType,
     Bool,
+    CharType,
     Unit,
     Arrow,
 
@@ -69,7 +71,7 @@ impl std::hash::Hash for Token {
 }
 
 #[derive(PartialEq, Debug)]
-pub enum LexError { UnrecognizedToken }
+pub enum LexError { UnrecognizedToken, SingleQuoteString, UnclosedQuote }
 
 use Token::*;
 use LexError::*;
@@ -162,6 +164,16 @@ impl Lexer {
                 }
             },
             '/' => Ok(Slash),
+            '\'' => {
+                // TODO: `c` must be escaped if necessary
+                let c = Self::read_char(input, ptr).ok_or(UnclosedQuote)?;
+                let q = Self::read_char(input, ptr).ok_or(UnclosedQuote)?;
+                if q != '\'' {
+                    Err(SingleQuoteString)
+                } else {
+                    Ok(Char(c))
+                }
+            }
             'a'..='z' | 'A'..='Z' | '_' => {
                 let rest = Self::read_while(input, ptr, |b: u8| { b.is_ascii_alphanumeric() || b == b'_' });
                 let word = String::from(ch) + &rest;
@@ -173,8 +185,9 @@ impl Lexer {
                     "return" => Ok(Return),
                     "if"     => Ok(If),
                     "else"   => Ok(Else),
-                    "int"    => Ok(Int),
+                    "int"    => Ok(IntType),
                     "bool"   => Ok(Bool),
+                    "char"   => Ok(CharType),
                     "unit"   => Ok(Unit),
                     _        => Ok(Id(word))
                 }
@@ -183,7 +196,7 @@ impl Lexer {
                 let rest = Self::read_while(input, ptr, |b| { (b as char).is_numeric() });
                 let num_str = String::from(ch) + &rest;
                 match num_str.parse::<i64>() {
-                    Ok(num) => Ok(Integer(num)),
+                    Ok(num) => Ok(Int(num)),
                     Err(_) => Err(UnrecognizedToken) // TODO: Create a token error for this
                 }
             }
@@ -206,6 +219,7 @@ mod tests {
     #[test]
     fn tokenize_simple_program() {
         let program = "
+            let dummy = 'a';
             let five = 5;
             let ten = 10;
             let add = fn(x, y) {
@@ -218,16 +232,19 @@ mod tests {
             match tkn.get_next_token() {
                 Ok(Eof) => { break; }
                 Ok(tk)  => { tokens.push(tk); }
-                Err(UnrecognizedToken) => { panic!("Unexpected error in tokenizer"); }
+                Err(UnrecognizedToken) => panic!("Unexpected error in tokenizer"),
+                Err(SingleQuoteString) => panic!("Strings cannot be enclosed by a single quote"),
+                Err(UnclosedQuote)     => panic!("Unclosed quote"),
             }
         }
         println!("{:?}", tokens);
         assert!(tokens ==
-          [Let, Id("five".to_string()), Assign, Integer(5), Semicolon, Let,
-           Id("ten".to_string()), Assign, Integer(10), Semicolon, Let,
+          [Let, Id("dummy".to_string()), Assign, Char('a'), Semicolon,
+           Let, Id("five".to_string()), Assign, Int(5), Semicolon, Let,
+           Id("ten".to_string()), Assign, Int(10), Semicolon, Let,
            Id("add".to_string()), Assign, Fn, LPar, Id("x".to_string()),
            Comma, Id("y".to_string()), RPar, LBrack, Id("x".to_string()), Plus,
-           Id("y".to_string()), Mult, Integer(3), Semicolon, RBrack, Semicolon, Let,
+           Id("y".to_string()), Mult, Int(3), Semicolon, RBrack, Semicolon, Let,
            Id("result".to_string()), Assign, Id("add".to_string()),
            LPar, Id("five".to_string()), Comma, Id("ten".to_string()),
            RPar, Semicolon

@@ -106,6 +106,7 @@ impl TypeCheck<Expr> for Context {
             }
             Expr::Integer(_) => Some(Type::Integer),
             Expr::Boolean(_) => Some(Type::Boolean),
+            Expr::Char(_)    => Some(Type::Char),
             Expr::Lambda(params, ret, body) => {
                 let expected_type = Expr::build_arrow(params, ret);
                 let mut scoped_bindings = params.clone();
@@ -181,4 +182,15 @@ impl TypeCheck<Expr> for Context {
             }
         }
     }
+}
+
+impl TypeCheck<Block> for Context {
+    fn tc(&mut self, b: &Block) -> Option<Type> {
+        self.scope_tc(vec![], b)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // TODO
 }

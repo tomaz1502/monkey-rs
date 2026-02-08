@@ -5,6 +5,7 @@ pub enum Type {
     Integer,
     Boolean,
     Unit,
+    Char,
     Arrow(Box<Type>, Box<Type>)
 }
 
@@ -14,6 +15,7 @@ impl fmt::Display for Type {
             Type::Integer       => write!(f, "int"),
             Type::Boolean       => write!(f, "bool"),
             Type::Unit          => write!(f, "unit"),
+            Type::Char          => write!(f, "char"),
             Type::Arrow(t1, t2) => write!(f, "{} -> {}", t1, t2),
         }
     }
@@ -92,9 +94,10 @@ pub enum Expr {
     Ident(Id),
     Integer(i64),
     Boolean(bool),
+    Char(char),
     Ite(Box<Expr>, Block, Option<Block>),
     Lambda(Vec<(Id, Type)>, Type, Block),
-    Call(Id, Vec<Expr>),
+    Call(Id, Vec<Expr>), // TODO: should accept any expression as the caller
     PrefixOp(PrefixOperator, Box<Expr>),
     InfixOp(InfixOperator, Box<Expr>, Box<Expr>)
 }
@@ -106,6 +109,7 @@ impl fmt::Display for Expr {
             Ident(name)               => write!(f, "{}", name),
             Integer(num)              => write!(f, "{}", num),
             Boolean(b)                => write!(f, "{}", b),
+            Char(c)                   => write!(f, "'{}'", c),
             Ite(cond, t, Some(e))     => write!(f, "if ({}) {{ {} }} else {{ {} }}", (*cond), t, e),
             Ite(cond, t, None)        => write!(f, "if ({}) {{ {} }}", (*cond), t),
             Lambda(params, ret, body) => {

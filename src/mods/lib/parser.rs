@@ -19,6 +19,7 @@ expr ::=
       <name>
     | <integer>
     | <boolean>
+    | <char>
     | "if" "(" <expr> ")"  <block>
     | "if" "(" <expr> ")"  <block> "else" <block>
     | "fn" "(" <comma_separated_typed_names> ")" "->" <type> <block>
@@ -114,13 +115,16 @@ impl lexer::Token {
     }
 }
 
+// TODO: Make LexError a subtype of this
 #[derive(Debug)]
-pub enum ParseError { UnrecognizedToken, UnexpectedToken }
+pub enum ParseError { UnrecognizedToken, UnexpectedToken, SingleQuoteString, UnclosedQuote }
 
 impl From<LexError> for ParseError {
     fn from(err: LexError) -> Self {
         match err {
-            LexError::UnrecognizedToken => ParseError::UnrecognizedToken
+            LexError::UnrecognizedToken => ParseError::UnrecognizedToken,
+            LexError::SingleQuoteString => ParseError::SingleQuoteString,
+            LexError::UnclosedQuote     => ParseError::UnclosedQuote,
         }
     }
 }
@@ -144,7 +148,8 @@ impl Parser {
         let mut parser =
             Parser { curr_token, lexer, prefix_fn_map: HashMap::new(), infix_fn_map: HashMap::new() };
         parser.register_prefix_fn(lexer::Token::Id("".to_string()), Self::parse_id_expr);
-        parser.register_prefix_fn(lexer::Token::Integer(0), Self::parse_int);
+        parser.register_prefix_fn(lexer::Token::Int(0), Self::parse_int);
+        parser.register_prefix_fn(lexer::Token::Char('a'), Self::parse_char);
         parser.register_prefix_fn(lexer::Token::Bang, Self::parse_prefix_op);
         parser.register_prefix_fn(lexer::Token::Minus, Self::parse_prefix_op);
         parser.register_prefix_fn(lexer::Token::True, Self::parse_bool);
@@ -223,7 +228,8 @@ impl Parser {
 
     fn token_to_basic_type(tk: &lexer::Token) -> Result<Type, ParseError> {
         match tk {
-            Int  => Ok(Type::Integer),
+            IntType  => Ok(Type::Integer),
+            CharType => Ok(Type::Char),
             Bool => Ok(Type::Boolean),
             Unit => Ok(Type::Unit),
             _    => Err(ParseError::UnexpectedToken)
@@ -293,9 +299,20 @@ impl Parser {
     fn parse_int(&mut self) -> Result<Expr, ParseError> {
         // This check looks redundant
         match self.curr_token {
-            Integer(num) => {
+            Int(num) => {
                 self.advance_token()?;
                 Ok(Expr::Integer(num))
+            }
+            _ => Err(ParseError::UnexpectedToken)
+        }
+    }
+
+    fn parse_char(&mut self) -> Result<Expr, ParseError> {
+        // This check looks redundant
+        match self.curr_token {
+            Char(c) => {
+                self.advance_token()?;
+                Ok(Expr::Char(c))
             }
             _ => Err(ParseError::UnexpectedToken)
         }
@@ -549,6 +566,22 @@ mod tests {
                 assert_eq!(prog.stmts[0].to_string(), case.parsed_pp);
             } else {
                 panic!("Parser failed");
+            }
+        }
+    }
+
+    #[test]
+    fn parse_let_char() {
+        struct TestCase { input: &'static str, parsed_pp: &'static str }
+        let cases = [
+            TestCase { input: "let foo = 'a';", parsed_pp: "let foo = 'a';"},
+        ];
+        for case in cases {
+            if let Ok(prog) = Parser::parse(case.input.to_string()) {
+                assert_eq!(prog.stmts.len(), 1);
+                assert_eq!(prog.stmts[0].to_string(), case.parsed_pp);
+            } else {
+                panic!("Parser failed!");
             }
         }
     }
