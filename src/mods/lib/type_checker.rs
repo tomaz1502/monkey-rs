@@ -164,6 +164,15 @@ impl TypeCheck<Expr> for Context {
                 }
                 Expr::check_call(caller_type, &arg_types)
             },
+            Expr::IndexedAccess(arr, idx) => {
+                let arr_type = self.tc(&**arr)?;
+                let idx_type = self.tc(&**idx)?;
+                if arr_type == Type::Str && idx_type == Type::Integer {
+                    Some(Type::Char)
+                } else {
+                    None
+                }
+            }
             Expr::PrefixOp(PrefixOperator::Minus, e) =>
                 if self.tc(&**e) == Some(Type::Integer) { Some(Type::Integer) } else { None },
             Expr::PrefixOp(PrefixOperator::Bang, e) =>

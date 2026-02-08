@@ -110,22 +110,58 @@ impl Evaluate<Expr> for Context {
                         self.scope_eval(cur_bindings, &body)
                     }
                     Expr::Ident(caller) => {
-                        match self.lookup(caller) {
-                            Some(EvalResult::Lambda(params, _, body)) => {
+                        match &caller[..] {
+                            "print" => {
                                 let evaluated_args = args.iter().map(|arg| self.eval(arg)).collect::<Option<Vec<_>>>()?;
-                                let mut cur_bindings = vec![];
-                                for (i, arg) in evaluated_args.into_iter().enumerate() {
-                                    let id = params[i].0.clone();
-                                    cur_bindings.push((id, arg));
+                                match &evaluated_args[..] {
+                                    [EvalResult::Str(s)] => {
+                                        print!("{}", s);
+                                        Some(EvalResult::Unit)
+                                    },
+                                    _ => unreachable!("impossible (TC)")
                                 }
-                                self.scope_eval(cur_bindings, &body)
                             },
-                            _ => None
+                            "read" => {
+                                let mut s = String::new();
+                                std::io::stdin().read_line(&mut s).unwrap();
+                                Some(EvalResult::Str(s))
+                            }
+                            _ => {
+                                match self.lookup(caller) {
+                                    Some(EvalResult::Lambda(params, _, body)) => {
+                                        let evaluated_args = args.iter().map(|arg| self.eval(arg)).collect::<Option<Vec<_>>>()?;
+                                        let mut cur_bindings = vec![];
+                                        for (i, arg) in evaluated_args.into_iter().enumerate() {
+                                            let id = params[i].0.clone();
+                                            cur_bindings.push((id, arg));
+                                        }
+                                        self.scope_eval(cur_bindings, &body)
+                                    },
+                                    _ => None
+                                }
+                            }
                         }
                     }
                     _ => None
                 }
             },
+            Expr::IndexedAccess(arr, idx) => {
+                match self.eval(&**arr)? {
+                    EvalResult::Str(s) => {
+                        match self.eval(&**idx)? {
+                            EvalResult::Integer(i) => {
+                                if i < 0 || i >= (s.len() as i64) {
+                                    None
+                                } else {
+                                    Some(EvalResult::Char(s.chars().nth(i as usize)?))
+                                }
+                            }
+                            _ => None,
+                        }
+                    }
+                    _ => None
+                }
+            }
             Expr::PrefixOp(PrefixOperator::Bang, b_) => {
                 match self.eval(&**b_)? {
                     EvalResult::Boolean(b) => Some(EvalResult::Boolean(!b)),

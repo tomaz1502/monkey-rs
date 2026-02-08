@@ -14,6 +14,8 @@ pub enum Token {
     // Delimeters
     LPar,
     RPar,
+    LSqBrack,
+    RSqBrack,
     LBrack,
     RBrack,
     Semicolon,
@@ -143,6 +145,8 @@ impl Lexer {
             ',' => Ok(Comma),
             '(' => Ok(LPar),
             ')' => Ok(RPar),
+            '[' => Ok(LSqBrack),
+            ']' => Ok(RSqBrack),
             '{' => Ok(LBrack),
             '}' => Ok(RBrack),
             '+' => Ok(Plus),

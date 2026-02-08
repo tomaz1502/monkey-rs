@@ -41,7 +41,7 @@ fn repl() -> io::Result<()> {
                     Some(_) => {
                         match ev_ctx.eval(&prog) {
                             Some(_) => {}
-                            _ => println!("Evaluatin failed."),
+                            _ => println!("Evaluation failed."),
                         }
                     }
                     _ => println!("Type checking failed."),

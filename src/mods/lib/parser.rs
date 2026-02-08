@@ -24,7 +24,8 @@ expr ::=
     | "if" "(" <expr> ")"  <block>
     | "if" "(" <expr> ")"  <block> "else" <block>
     | "fn" "(" <comma_separated_typed_names> ")" "->" <type> <block>
-    | <name> "(" <comma_separated_names> ")"
+    | <expr> "(" <comma_separated_exprs> ")"
+    | <expr> "[" <expr> "]"
     | <prefix_op> <expr>
     | <expr> <infix_op> <expr>
 
@@ -36,10 +37,10 @@ type ::=
 
 typed_name ::= <name> ":" <type>
 
-comma_separated_names ::=
+comma_separated_exprs ::=
       ""
-    | <name>
-    | <name> "," <comma_separated_names>
+    | <expr>
+    | <expr> "," <comma_separated_exprs>
 
 comma_separated_typed_names ::=
       ""
@@ -102,16 +103,17 @@ enum Precedence {
 impl lexer::Token {
     fn prec(&self) -> Precedence {
         match self {
-            Eq    => Precedence::Equals,
-            Neq   => Precedence::Equals,
-            LT    => Precedence::LessGreater,
-            GT    => Precedence::LessGreater,
-            Plus  => Precedence::Sum,
-            Minus => Precedence::Sum,
-            Mult  => Precedence::Product,
-            Slash => Precedence::Product,
-            LPar  => Precedence::Call,
-            _     => Precedence::Lowest
+            Eq       => Precedence::Equals,
+            Neq      => Precedence::Equals,
+            LT       => Precedence::LessGreater,
+            GT       => Precedence::LessGreater,
+            Plus     => Precedence::Sum,
+            Minus    => Precedence::Sum,
+            Mult     => Precedence::Product,
+            Slash    => Precedence::Product,
+            LPar     => Precedence::Call,
+            LSqBrack => Precedence::Call,
+            _        => Precedence::Lowest
         }
     }
 }
@@ -169,6 +171,7 @@ impl Parser {
         parser.register_infix_fn(lexer::Token::Eq, Self::parse_infix_op);
         parser.register_infix_fn(lexer::Token::Neq, Self::parse_infix_op);
         parser.register_infix_fn(lexer::Token::LPar, Self::parse_call);
+        parser.register_infix_fn(lexer::Token::LSqBrack, Self::parse_indexed_access);
         Ok(parser)
     }
 
@@ -296,6 +299,14 @@ impl Parser {
         self.expect_token(RPar)?;
         self.advance_token()?;
         Ok(Expr::Call(Box::new(f), args))
+    }
+
+    fn parse_indexed_access(&mut self, arr: Expr) -> Result<Expr, ParseError> {
+        self.advance_token()?;
+        let idx = self.parse_expr()?;
+        self.expect_token(RSqBrack)?;
+        self.advance_token()?;
+        Ok(Expr::IndexedAccess(Box::new(arr), Box::new(idx)))
     }
 
     fn parse_int(&mut self) -> Result<Expr, ParseError> {

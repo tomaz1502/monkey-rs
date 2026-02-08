@@ -102,6 +102,7 @@ pub enum Expr {
     Ite(Box<Expr>, Block, Option<Block>),
     Lambda(Vec<(Id, Type)>, Type, Block),
     Call(Box<Expr>, Vec<Expr>), // TODO: should accept any expression as the caller
+    IndexedAccess(Box<Expr>, Box<Expr>),
     PrefixOp(PrefixOperator, Box<Expr>),
     InfixOp(InfixOperator, Box<Expr>, Box<Expr>)
 }
@@ -124,6 +125,7 @@ impl fmt::Display for Expr {
                 write!(f, "fn ({}) -> {} {{ {} }}", typed_ids.join(", "), ret, body)
             }
             Call(name, args)          => write!(f, "{}({})", name, args.iter().map(Expr::to_string).collect::<Vec<_>>().join(", ")),
+            IndexedAccess(arr, idx)   => write!(f, "{}[{}]", arr, idx),
             PrefixOp(op, arg)         => write!(f, "({}{})", op, arg),
             InfixOp(op, lhs, rhs)     => write!(f, "({} {} {})", lhs, op, rhs)
         }
