@@ -33,8 +33,20 @@ fn repl() -> io::Result<()> {
         print!(">> ");
         io::stdout().flush()?;
         let line = stdin.lock().lines().next().unwrap().unwrap();
+        let mut tc_ctx = type_checker::Context::new();
+        let mut ev_ctx = evaluator::Context::new();
         match parser::Parser::parse(line) {
-            Ok(prog) => println!("{:?}", prog),
+            Ok(prog) => {
+                match tc_ctx.tc(&prog) {
+                    Some(_) => {
+                        match ev_ctx.eval(&prog) {
+                            Some(_) => {}
+                            _ => println!("Evaluatin failed."),
+                        }
+                    }
+                    _ => println!("Type checking failed."),
+                }
+            }
             Err(err) => println!("Error while parsing! {:?}", err)
         }
     }
@@ -42,23 +54,18 @@ fn repl() -> io::Result<()> {
 
 fn interpret_file(file_path: &str) -> io::Result<()> {
     let source_code = get_text(file_path)?;
-    let mut ctx = type_checker::Context::new();
+    let mut tc_ctx = type_checker::Context::new();
+    let mut ev_ctx = evaluator::Context::new();
     match parser::Parser::parse(source_code) {
-        Ok(mut prog) => {
-            let opt_typ = ctx.tc(&prog);
-            match opt_typ {
-                None => println!("Typing error."),
-                Some(typ) => {
-                    println!("Typing OK.");
-                    println!("\n--------------------------------------------------------\n");
-                    println!("AST: {:?}", prog);
-                    println!("\n--------------------------------------------------------\n");
-                    println!("TYPE: {:?}", typ);
-                    println!("\n--------------------------------------------------------\n");
-                    let mut ev_ctx = evaluator::Context::new();
-                    let res = ev_ctx.eval(&mut prog);
-                    println!("RESULT: {:?}", res)
+        Ok(prog) => {
+            match tc_ctx.tc(&prog) {
+                Some(_) => {
+                    match ev_ctx.eval(&prog) {
+                        Some(_) => {}
+                        _ => println!("Evaluatin failed."),
+                    }
                 }
+                _ => println!("Type checking failed."),
             }
         }
         Err(err) => println!("Error while parsing! {:?}", err)

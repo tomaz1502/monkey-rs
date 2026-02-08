@@ -49,6 +49,7 @@ impl Context {
 }
 
 pub trait Evaluate<T> {
+    // TODO: Should be result
     fn eval(&mut self, t: &T) -> Option<EvalResult>;
 }
 
@@ -95,14 +96,25 @@ impl Evaluate<Expr> for Context {
             Expr::Lambda(params, ret, body) => Some(EvalResult::Lambda(params.clone(), ret.clone(), body.clone())),
             Expr::Call(caller, args) => {
                 match self.lookup(caller) {
-                    None => None,
-                    Some(EvalResult::Lambda(params, _, body)) => {
-                        let mut evaluated_args = vec![];
-                        for arg in args.iter() {
-                            let evaluated_arg = self.eval(arg)?;
-                            evaluated_args.push(evaluated_arg);
+                    None => {
+                        match &caller[..] {
+                            "print" => {
+                                let evaluated_args = args.iter().map(|arg| self.eval(arg)).collect::<Option<Vec<_>>>()?;
+                                match &evaluated_args[..] {
+                                    [EvalResult::Str(s)] => {
+                                        print!("{}", s);
+                                        Some(EvalResult::Unit)
+                                    },
+                                    _ => unreachable!("impossible (TC)")
+                                }
+                            }
+                            _ => None,
                         }
+                    }
+                    Some(EvalResult::Lambda(params, _, body)) => {
+                        let evaluated_args = args.iter().map(|arg| self.eval(arg)).collect::<Option<Vec<_>>>()?;
                         // NOTE: `caller` is already there
+                        // NOTE: No need to check arity since we already type checked
                         let mut cur_bindings = vec![];
                         for (i, arg) in evaluated_args.into_iter().enumerate() {
                             let id = params[i].0.clone();

@@ -1,3 +1,4 @@
+use crate::mods::lib::utils::unescape;
 use std::hash::Hasher;
 
 #[derive(Debug, Clone)]
@@ -58,6 +59,9 @@ impl Token {
 }
 
 // we can't derive because we need Id(_) = Id(_) and Integer(_) = Integer(_) for the hashmap
+// note that this is effectively changing the behaviour of `t1 == t2` for tokens, but we
+// only compare tokens for their discriminant in the parser. but maybe we should take more
+// care?
 impl PartialEq for Token {
     fn eq(&self, other: &Token) -> bool {
         self.discriminant() == other.discriminant()
@@ -112,11 +116,13 @@ impl Lexer {
     }
 
     fn read_while(input: &[u8], ptr: &mut usize, pred: fn(u8) -> bool) -> String {
-        let mut tok = String::from("");
+        let mut bytes = vec![];
         while *ptr < input.len() && pred(input[*ptr]) {
-            tok.push(input[*ptr] as char);
+            bytes.push(input[*ptr]);
             *ptr += 1;
         }
+        let escaped_tok = String::from_utf8(bytes).unwrap();
+        let tok = unescape(&escaped_tok);
         tok
     }
 

@@ -7,6 +7,9 @@ static EQUALITY_TYPES: [Type; 3] = [Type::Integer, Type::Boolean, Type::Char];
 
 pub struct Context {
     bindings_stack: Vec<HashMap<Id, Type>>,
+    // NOTE: I wish this was static and shared with the evaluator, but
+    // types are recursive and can't have their size known at compile time
+    builtins: HashMap<String, Type>,
     // This represents the current name that is being defined via a `let`.
     // It wasn't introduced in the bindings yet since we still don't know its type,
     // but we still need it, for instance, for recursive definitions.
@@ -15,7 +18,10 @@ pub struct Context {
 
 impl Context {
     pub fn new() -> Self {
-        Context { bindings_stack: vec![], curr_let_def: None }
+        let builtins = HashMap::from([
+            ("print".to_string(), Type::Arrow(Box::new(Type::Str), Box::new(Type::Unit))),
+        ]);
+        Context { builtins, bindings_stack: vec![], curr_let_def: None }
     }
 
     fn lookup(&self, id: &Id) -> Option<Type> {
@@ -25,6 +31,14 @@ impl Context {
             }
         }
         None
+    }
+
+    fn lookup_builtin(&self, id: &Id) -> Option<Type> {
+        self.builtins.get(id).cloned()
+    }
+
+    fn lookup_full(&self, id: &Id) -> Option<Type> {
+        self.lookup_builtin(id).or(self.lookup(id))
     }
 
     pub fn scope_tc(&mut self, bindings: Vec<(Id, Type)>, block: &Block) -> Option<Type> {
@@ -104,7 +118,7 @@ impl TypeCheck<Expr> for Context {
     fn tc(&mut self, expr: &Expr) -> Option<Type> {
         match expr {
             Expr::Ident(id)  => {
-                self.lookup(id)
+                self.lookup_full(id)
             }
             Expr::Integer(_) => Some(Type::Integer),
             Expr::Boolean(_) => Some(Type::Boolean),
@@ -141,7 +155,7 @@ impl TypeCheck<Expr> for Context {
                 }
             }
             Expr::Call(caller, args) => {
-                let caller_type = self.lookup(caller)?;
+                let caller_type = self.lookup_full(caller)?;
                 let mut arg_types = vec![];
                 for arg in args {
                     arg_types.push(self.tc(arg)?);
