@@ -98,6 +98,7 @@ pub enum Expr {
     Boolean(bool),
     Char(char),
     Str(String),
+    Unit,
     Ite(Box<Expr>, Block, Option<Block>),
     Lambda(Vec<(Id, Type)>, Type, Block),
     Call(Id, Vec<Expr>), // TODO: should accept any expression as the caller
@@ -114,6 +115,7 @@ impl fmt::Display for Expr {
             Boolean(b)                => write!(f, "{}", b),
             Char(c)                   => write!(f, "'{}'", c),
             Str(s)                    => write!(f, "\"{}\"", s),
+            Unit                      => write!(f, "unit"),
             Ite(cond, t, Some(e))     => write!(f, "if ({}) {{ {} }} else {{ {} }}", (*cond), t, e),
             Ite(cond, t, None)        => write!(f, "if ({}) {{ {} }}", (*cond), t),
             Lambda(params, ret, body) => {

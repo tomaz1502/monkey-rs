@@ -81,6 +81,7 @@ impl Evaluate<Expr> for Context {
             Expr::Boolean(b) => Some(EvalResult::Boolean(*b)),
             Expr::Char(c)    => Some(EvalResult::Char(*c)),
             Expr::Str(s)     => Some(EvalResult::Str(s.clone())),
+            Expr::Unit       => Some(EvalResult::Unit),
             Expr::Ident(id) => self.lookup(id),
             Expr::Ite(cond, t, opt_e) =>
                 match self.eval(&**cond)? {
@@ -107,6 +108,11 @@ impl Evaluate<Expr> for Context {
                                     },
                                     _ => unreachable!("impossible (TC)")
                                 }
+                            },
+                            "read" => {
+                                let mut s = String::new();
+                                std::io::stdin().read_line(&mut s).unwrap();
+                                Some(EvalResult::Str(s))
                             }
                             _ => None,
                         }

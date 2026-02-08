@@ -20,6 +20,7 @@ impl Context {
     pub fn new() -> Self {
         let builtins = HashMap::from([
             ("print".to_string(), Type::Arrow(Box::new(Type::Str), Box::new(Type::Unit))),
+            ("read".to_string(), Type::Arrow(Box::new(Type::Unit), Box::new(Type::Str))),
         ]);
         Context { builtins, bindings_stack: vec![], curr_let_def: None }
     }
@@ -124,6 +125,7 @@ impl TypeCheck<Expr> for Context {
             Expr::Boolean(_) => Some(Type::Boolean),
             Expr::Char(_)    => Some(Type::Char),
             Expr::Str(_)    => Some(Type::Str),
+            Expr::Unit      => Some(Type::Unit),
             Expr::Lambda(params, ret, body) => {
                 let expected_type = Expr::build_arrow(params, ret);
                 let mut scoped_bindings = params.clone();

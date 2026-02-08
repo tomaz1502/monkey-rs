@@ -151,6 +151,7 @@ impl Parser {
         parser.register_prefix_fn(lexer::Token::IntLit(0), Self::parse_int);
         parser.register_prefix_fn(lexer::Token::CharLit('a'), Self::parse_char);
         parser.register_prefix_fn(lexer::Token::StrLit("".to_string()), Self::parse_string);
+        parser.register_prefix_fn(lexer::Token::Unit, Self::parse_unit);
         parser.register_prefix_fn(lexer::Token::Bang, Self::parse_prefix_op);
         parser.register_prefix_fn(lexer::Token::Minus, Self::parse_prefix_op);
         parser.register_prefix_fn(lexer::Token::True, Self::parse_bool);
@@ -292,6 +293,9 @@ impl Parser {
                 break;
             }
         }
+        if args.is_empty() {
+            args.push(Expr::Unit);
+        }
         self.expect_token(RPar)?;
         self.advance_token()?;
         Ok(Expr::Call(f_id_str, args))
@@ -314,6 +318,17 @@ impl Parser {
             CharLit(c) => {
                 self.advance_token()?;
                 Ok(Expr::Char(c))
+            }
+            _ => Err(ParseError::UnexpectedToken)
+        }
+    }
+
+    fn parse_unit(&mut self) -> Result<Expr, ParseError> {
+        // This check looks redundant
+        match self.curr_token {
+            Unit => {
+                self.advance_token()?;
+                Ok(Expr::Unit)
             }
             _ => Err(ParseError::UnexpectedToken)
         }

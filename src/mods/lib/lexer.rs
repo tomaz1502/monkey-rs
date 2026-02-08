@@ -9,6 +9,7 @@ pub enum Token {
     IntLit(i64),
     CharLit(char),
     StrLit(String),
+    Unit,
 
     // Delimeters
     LPar,
@@ -205,6 +206,7 @@ impl Lexer {
                     "char"   => Ok(CharType),
                     "string" => Ok(StrType),
                     "unit"   => Ok(UnitType),
+                    "uu"     => Ok(Unit),
                     _        => Ok(Identifier(word))
                 }
             }
