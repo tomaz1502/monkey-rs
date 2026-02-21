@@ -59,6 +59,7 @@ use std::collections::HashMap;
 
 use crate::mods::lib::lexer;
 use crate::mods::lib::expr::*;
+use crate::mods::lib::utils::RESERVED_WORDS;
 
 use lexer::Token::*;
 use lexer::LexError;
@@ -120,7 +121,13 @@ impl lexer::Token {
 
 // TODO: Make LexError a subtype of this
 #[derive(Debug)]
-pub enum ParseError { UnrecognizedToken, UnexpectedToken, SingleQuoteString, UnclosedQuote }
+pub enum ParseError {
+    UnrecognizedToken,
+    UnexpectedToken,
+    SingleQuoteString,
+    UnclosedQuote,
+    ReservedIdentifier(String),
+}
 
 impl From<LexError> for ParseError {
     fn from(err: LexError) -> Self {
@@ -238,6 +245,7 @@ impl Parser {
             CharType => Ok(Type::Char),
             BoolType => Ok(Type::Boolean),
             UnitType => Ok(Type::Unit),
+            StrType  => Ok(Type::Str),
             _    => Err(ParseError::UnexpectedToken)
         }
     }
@@ -431,6 +439,11 @@ impl Parser {
     fn parse_let(&mut self) -> Result<Stmt, ParseError> {
         self.advance_token()?;
         let id = self.parse_id()?;
+
+        if RESERVED_WORDS.contains(&id.as_str()) {
+            return Err(ParseError::ReservedIdentifier(id));
+        }
+
         self.expect_token(Assign)?;
         self.advance_token()?;
         let expr = self.parse_expr()?;

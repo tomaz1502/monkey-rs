@@ -1,3 +1,22 @@
+pub static RESERVED_WORDS : [&'static str; 16] =
+  [ "len"
+  , "print"
+  , "read"
+  , "let"
+  , "fn"
+  , "false"
+  , "true"
+  , "return"
+  , "if"
+  , "else"
+  , "int"
+  , "bool"
+  , "char"
+  , "string"
+  , "unit"
+  , "uu"
+  ];
+
 pub fn unescape(input: &String) -> String {
     let mut out = String::new();
     let mut chars = input.chars();
