@@ -91,7 +91,6 @@ pub struct Lexer {
     ptr: usize
 }
 
-// NOTE: why aren't you using self?
 impl Lexer {
     pub fn new(input: String) -> Self {
         Lexer { input: input.as_bytes().to_vec(), ptr: 0 }
@@ -101,43 +100,42 @@ impl Lexer {
         byt == b' ' || byt == b'\n' || byt == b'\t'
     }
 
-    fn peek(input: &[u8], ptr: &usize) -> Option<char> {
-        if *ptr == input.len() {
+    fn peek(&self) -> Option<char> {
+        if self.ptr == self.input.len() {
             None
         } else {
-            Some(input[*ptr] as char)
+            Some(self.input[self.ptr] as char)
         }
     }
 
-    fn read_char(input: &[u8], ptr: &mut usize) -> Option<char> {
-        if *ptr == input.len() {
+    fn read_char(&mut self) -> Option<char> {
+        if self.ptr == self.input.len() {
             None
         } else {
-            let ch = input[*ptr] as char;
-            *ptr += 1;
+            let ch = self.input[self.ptr] as char;
+            self.ptr += 1;
             Some(ch)
         }
     }
 
-    fn read_while(input: &[u8], ptr: &mut usize, pred: fn(u8) -> bool) -> String {
+    fn read_while(&mut self, pred: fn(u8) -> bool) -> String {
         let mut bytes = vec![];
-        while *ptr < input.len() && pred(input[*ptr]) {
-            bytes.push(input[*ptr]);
-            *ptr += 1;
+        while self.ptr < self.input.len() && pred(self.input[self.ptr]) {
+            bytes.push(self.input[self.ptr]);
+            self.ptr += 1;
         }
         let escaped_tok = String::from_utf8(bytes).unwrap();
         let tok = unescape(&escaped_tok);
         tok
     }
 
-    fn get_next_aux(input: &[u8], ptr: &mut usize) -> Result<Token, LexError> {
-        while *ptr < input.len() && Self::is_space(input[*ptr]) {
-            *ptr += 1;
+    fn get_next_aux(&mut self) -> Result<Token, LexError> {
+        while self.ptr < self.input.len() && Self::is_space(self.input[self.ptr]) {
+            self.ptr += 1;
         }
-
-        let ch = match Self::read_char(input, ptr) {
+        let ch = match self.read_char() {
             None => return Ok(Eof),
-            Some(ch) => ch
+            Some(ch) => ch,
         };
 
         match ch {
@@ -152,16 +150,16 @@ impl Lexer {
             '}' => Ok(RBrack),
             '+' => Ok(Plus),
             '=' => {
-                if Self::peek(input, ptr) == Some('=') {
-                    Self::read_char(input, ptr);
+                if self.peek() == Some('=') {
+                    self.read_char();
                     Ok(Eq)
                 } else {
                     Ok(Assign)
                 }
             }
             '-' => {
-                if Self::peek(input, ptr) == Some('>') {
-                    Self::read_char(input, ptr);
+                if self.peek() == Some('>') {
+                    self.read_char();
                     Ok(ArrowType)
                 } else {
                     Ok(Minus)
@@ -171,8 +169,8 @@ impl Lexer {
             '<' => Ok(LT),
             '>' => Ok(GT),
             '!' => {
-                if Self::peek(input, ptr) == Some('=') {
-                    Self::read_char(input, ptr);
+                if self.peek() == Some('=') {
+                    self.read_char();
                     Ok(Neq)
                 } else {
                     Ok(Bang)
@@ -183,8 +181,8 @@ impl Lexer {
             // TODO: Don't accept line break inside single or double quote
             '\'' => {
                 // TODO: `c` must be escaped if necessary
-                let c = Self::read_char(input, ptr).ok_or(UnclosedQuote)?;
-                let q = Self::read_char(input, ptr).ok_or(UnclosedQuote)?;
+                let c = self.read_char().ok_or(UnclosedQuote)?;
+                let q = self.read_char().ok_or(UnclosedQuote)?;
                 if q != '\'' {
                     Err(SingleQuoteString)
                 } else {
@@ -192,12 +190,12 @@ impl Lexer {
                 }
             }
             '\"' => {
-                let s = Self::read_while(input, ptr, |b: u8| { b != b'\"' });
-                let _ = Self::read_char(input, ptr);
+                let s = self.read_while(|b: u8| { b != b'\"' });
+                let _ = self.read_char();
                 Ok(StrLit(s))
             },
             'a'..='z' | 'A'..='Z' | '_' => {
-                let rest = Self::read_while(input, ptr, |b: u8| { b.is_ascii_alphanumeric() || b == b'_' });
+                let rest = self.read_while(|b: u8| { b.is_ascii_alphanumeric() || b == b'_' });
                 let word = String::from(ch) + &rest;
                 match word.as_str() {
                     "let"    => Ok(Let),
@@ -217,7 +215,7 @@ impl Lexer {
                 }
             }
             '0'..='9' => {
-                let rest = Self::read_while(input, ptr, |b| { (b as char).is_numeric() });
+                let rest = self.read_while(|b| { (b as char).is_numeric() });
                 let num_str = String::from(ch) + &rest;
                 match num_str.parse::<i64>() {
                     Ok(num) => Ok(IntLit(num)),
@@ -230,7 +228,7 @@ impl Lexer {
 
     // TODO: Iterator trait?
     pub fn get_next_token(&mut self) -> Result<Token, LexError> {
-        Self::get_next_aux(&self.input, &mut self.ptr)
+        self.get_next_aux()
     }
 }
 
