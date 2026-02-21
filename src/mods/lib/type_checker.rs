@@ -22,6 +22,29 @@ impl Context {
             ("print".to_string(), Type::Arrow(Box::new(Type::Str), Box::new(Type::Unit))),
             ("read".to_string(), Type::Arrow(Box::new(Type::Unit), Box::new(Type::Str))),
             ("len".to_string(), Type::Arrow(Box::new(Type::Str), Box::new(Type::Integer))),
+            ("getSlice".to_string(),
+              Type::Arrow(
+                  Box::new(Type::Str),
+                  Box::new(Type::Arrow(
+                          Box::new(Type::Integer),
+                          Box::new(Type::Arrow(
+                                  Box::new(Type::Integer), Box::new(Type::Str)
+            )))))),
+            ("getElem".to_string(),
+             Type::Arrow(
+                 Box::new(Type::Str),
+                 Box::new(Type::Arrow(
+                         Box::new(Type::Integer),
+                         Box::new(Type::Char)
+            )))),
+            ("concat".to_string(),
+             Type::Arrow(
+                 Box::new(Type::Str),
+                 Box::new(Type::Arrow(Box::new(Type::Str), Box::new(Type::Str)
+            )))),
+            ("strOfChar".to_string(),
+             Type::Arrow(Box::new(Type::Char), Box::new(Type::Str)))
+
         ]);
         Context { builtins, bindings_stack: vec![], curr_let_def: None }
     }
@@ -185,7 +208,7 @@ impl TypeCheck<Expr> for Context {
                     if EQUALITY_TYPES.contains(&te1) {
                         Some(Type::Boolean)
                     } else {
-                        None // NOTE: Give a different typing error here then in the other branch
+                        None // TODO: Give a different typing error here then in the other branch
                     }
                 } else {
                     None
@@ -194,7 +217,8 @@ impl TypeCheck<Expr> for Context {
             Expr::InfixOp(InfixOperator::Plus, e1, e2)  |
             Expr::InfixOp(InfixOperator::Minus, e1, e2) |
             Expr::InfixOp(InfixOperator::Mult, e1, e2)  |
-            Expr::InfixOp(InfixOperator::Div, e1, e2) => {
+            Expr::InfixOp(InfixOperator::Div, e1, e2)   |
+            Expr::InfixOp(InfixOperator::Mod, e1, e2) => {
                 let te1 = self.tc(&**e1)?;
                 let te2 = self.tc(&**e2)?;
                 if te1 == te2 && te1 == Type::Integer {

@@ -1,4 +1,4 @@
-pub static RESERVED_WORDS : [&'static str; 16] =
+pub static RESERVED_WORDS : [&'static str; 17] =
   [ "len"
   , "print"
   , "read"
@@ -15,6 +15,7 @@ pub static RESERVED_WORDS : [&'static str; 16] =
   , "string"
   , "unit"
   , "uu"
+  , "getSlice"
   ];
 
 pub fn unescape(input: &String) -> String {

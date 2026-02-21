@@ -20,12 +20,11 @@ expr ::=
     | <integer>
     | <boolean>
     | <char>
-    | <sting>
-    | "if" "(" <expr> ")"  <block>
-    | "if" "(" <expr> ")"  <block> "else" <block>
+    | <string>
+    | "uu"
+    | "if" "(" <expr> ")" <block> ("else" "if" <block>)* ("else" <block>)?
     | "fn" "(" <comma_separated_typed_names> ")" "->" <type> <block>
     | <expr> "(" <comma_separated_exprs> ")"
-    | <expr> "[" <expr> "]"
     | <prefix_op> <expr>
     | <expr> <infix_op> <expr>
 
@@ -33,6 +32,8 @@ type ::=
       "unit"
     | "int"
     | "bool"
+    | "char"
+    | "string"
     | <type> "->" <type>
 
 typed_name ::= <name> ":" <type>
@@ -51,7 +52,7 @@ prefix_op ::=
     "-" | "!"
 
 infix_op ::=
-    "+" | "-" | "*" | "/" | "=" | "!=" | "<" | ">"
+    "+" | "-" | "*" | "/" | "%" | "=" | "!=" | "<" | ">"
 */
 
 
@@ -77,15 +78,16 @@ impl PrefixOperator {
 impl InfixOperator {
     fn from_tok(tok: &lexer::Token) -> Result<Self, ParseError> {
         match tok {
-            lexer::Token::Plus  => Ok(InfixOperator::Plus),
-            lexer::Token::Minus => Ok(InfixOperator::Minus),
-            lexer::Token::Mult  => Ok(InfixOperator::Mult),
-            lexer::Token::Slash => Ok(InfixOperator::Div),
-            lexer::Token::LT    => Ok(InfixOperator::LT),
-            lexer::Token::GT    => Ok(InfixOperator::GT),
-            lexer::Token::Eq    => Ok(InfixOperator::Eq),
-            lexer::Token::Neq   => Ok(InfixOperator::Neq),
-            _                   => Err(ParseError::UnexpectedToken) // TODO: Should we have another parse error here?
+            lexer::Token::Plus    => Ok(InfixOperator::Plus),
+            lexer::Token::Minus   => Ok(InfixOperator::Minus),
+            lexer::Token::Mult    => Ok(InfixOperator::Mult),
+            lexer::Token::Slash   => Ok(InfixOperator::Div),
+            lexer::Token::Modulus => Ok(InfixOperator::Mod),
+            lexer::Token::LT      => Ok(InfixOperator::LT),
+            lexer::Token::GT      => Ok(InfixOperator::GT),
+            lexer::Token::Eq      => Ok(InfixOperator::Eq),
+            lexer::Token::Neq     => Ok(InfixOperator::Neq),
+            _                     => Err(ParseError::UnexpectedToken) // TODO: Should we have another parse error here?
         }
     }
 }
@@ -112,6 +114,7 @@ impl lexer::Token {
             Minus    => Precedence::Sum,
             Mult     => Precedence::Product,
             Slash    => Precedence::Product,
+            Modulus  => Precedence::Product,
             LPar     => Precedence::Call,
             LSqBrack => Precedence::Call,
             _        => Precedence::Lowest
@@ -173,6 +176,7 @@ impl Parser {
         parser.register_infix_fn(lexer::Token::Minus, Self::parse_infix_op);
         parser.register_infix_fn(lexer::Token::Mult, Self::parse_infix_op);
         parser.register_infix_fn(lexer::Token::Slash, Self::parse_infix_op);
+        parser.register_infix_fn(lexer::Token::Modulus, Self::parse_infix_op);
         parser.register_infix_fn(lexer::Token::LT, Self::parse_infix_op);
         parser.register_infix_fn(lexer::Token::GT, Self::parse_infix_op);
         parser.register_infix_fn(lexer::Token::Eq, Self::parse_infix_op);
@@ -232,8 +236,15 @@ impl Parser {
         let then_block = self.parse_block()?;
         if self.curr_token == Else {
             self.advance_token()?;
-            let else_block = self.parse_block()?;
-            Ok(Expr::Ite(Box::new(cond), then_block, Some(else_block)))
+            if self.curr_token == If {
+                let r = self.parse_ite()?;
+                let s = Stmt::Expr(r);
+                let b = Block { stmts: vec![s] };
+                Ok(Expr::Ite(Box::new(cond), then_block, Some(b)))
+            } else {
+                let else_block = self.parse_block()?;
+                Ok(Expr::Ite(Box::new(cond), then_block, Some(else_block)))
+            }
         } else {
             Ok(Expr::Ite(Box::new(cond), then_block, None))
         }

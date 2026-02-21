@@ -29,6 +29,7 @@ pub enum Token {
     Bang,
     Mult,
     Slash,
+    Modulus,
     LT,
     GT,
     Eq,
@@ -178,6 +179,7 @@ impl Lexer {
                 }
             },
             '/' => Ok(Slash),
+            '%' => Ok(Modulus),
             // TODO: Don't accept line break inside single or double quote
             '\'' => {
                 // TODO: `c` must be escaped if necessary

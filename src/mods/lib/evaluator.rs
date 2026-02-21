@@ -96,10 +96,10 @@ impl Evaluate<Expr> for Context {
                 },
             Expr::Lambda(params, ret, body) => Some(EvalResult::Lambda(params.clone(), ret.clone(), body.clone())),
             Expr::Call(caller, args) => {
+                let evaluated_args = args.iter().map(|arg| self.eval(arg)).collect::<Option<Vec<_>>>()?;
                 match &**caller {
                     Expr::Lambda(params, _, body) => {
                         // TODO: abstract this code
-                        let evaluated_args = args.iter().map(|arg| self.eval(arg)).collect::<Option<Vec<_>>>()?;
                         // NOTE: `caller` is already there
                         // NOTE: No need to check arity since we already type checked
                         let mut cur_bindings = vec![];
@@ -111,8 +111,10 @@ impl Evaluate<Expr> for Context {
                     }
                     Expr::Ident(caller) => {
                         match &caller[..] {
+                            // NOTE: the correctness of the compiler relies on the fact that
+                            // this internal implementation returns the correct type; this
+                            // is not guaranteed by the type checker.
                             "print" => {
-                                let evaluated_args = args.iter().map(|arg| self.eval(arg)).collect::<Option<Vec<_>>>()?;
                                 match &evaluated_args[..] {
                                     [EvalResult::Str(s)] => {
                                         print!("{}", s);
@@ -127,7 +129,6 @@ impl Evaluate<Expr> for Context {
                                 Some(EvalResult::Str(s))
                             }
                             "len" => {
-                                let evaluated_args = args.iter().map(|arg| self.eval(arg)).collect::<Option<Vec<_>>>()?;
                                 match &evaluated_args[..] {
                                     [EvalResult::Str(s)] => {
                                         Some(EvalResult::Integer(s.len() as i64))
@@ -135,10 +136,43 @@ impl Evaluate<Expr> for Context {
                                     _ => unreachable!("impossible (TC)")
                                 }
                             }
+                            "getSlice" => {
+                                match &evaluated_args[..] {
+                                    [EvalResult::Str(s), EvalResult::Integer(i), EvalResult::Integer(j)] => {
+                                        let t = String::from(&s[(*i as usize)..(*j as usize)]);
+                                        Some(EvalResult::Str(t))
+                                    }
+                                    _ => unreachable!("impossible (TC)")
+                                }
+                            }
+                            "getElem" => {
+                                match &evaluated_args[..] {
+                                    [EvalResult::Str(s), EvalResult::Integer(i)] => {
+                                        Some(EvalResult::Char(s.chars().nth(*i as usize)?))
+                                    }
+                                    _ => unreachable!("impossible (TC)")
+                                }
+                            }
+                            "concat" => {
+                                match &evaluated_args[..] {
+                                    [EvalResult::Str(s1), EvalResult::Str(s2)] => {
+                                        let t = format!("{}{}", s1, s2);
+                                        Some(EvalResult::Str(t))
+                                    }
+                                    _ => unreachable!("impossible (TC)")
+                                }
+                            }
+                            "strOfChar" => {
+                                match &evaluated_args[..] {
+                                    [EvalResult::Char(c)] => {
+                                        Some(EvalResult::Str(String::from(*c)))
+                                    }
+                                    _ => unreachable!("impossible (TC)")
+                                }
+                            }
                             _ => {
                                 match self.lookup(caller) {
                                     Some(EvalResult::Lambda(params, _, body)) => {
-                                        let evaluated_args = args.iter().map(|arg| self.eval(arg)).collect::<Option<Vec<_>>>()?;
                                         let mut cur_bindings = vec![];
                                         for (i, arg) in evaluated_args.into_iter().enumerate() {
                                             let id = params[i].0.clone();
@@ -204,6 +238,12 @@ impl Evaluate<Expr> for Context {
             Expr::InfixOp(InfixOperator::Div, n_, m_) => {
                 match (self.eval(&**n_)?, self.eval(&**m_)?) {
                     (EvalResult::Integer(n), EvalResult::Integer(m)) => Some(EvalResult::Integer(n / m)),
+                    _ => None,
+                }
+            },
+            Expr::InfixOp(InfixOperator::Mod, n_, m_) => {
+                match (self.eval(&**n_)?, self.eval(&**m_)?) {
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Some(EvalResult::Integer(n % m)),
                     _ => None,
                 }
             },
