@@ -21,7 +21,8 @@ pub struct Context {
 
 impl Context {
     pub fn new() -> Self {
-        Context { bindings_stack: vec![] }
+        //                             Global context
+        Context { bindings_stack: vec![HashMap::new()] }
     }
 
     fn lookup(&self, id: &Id) -> Option<EvalResult> {

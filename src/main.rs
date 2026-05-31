@@ -27,28 +27,24 @@ fn get_text(file_path: &str) -> io::Result<String> {
     }
 }
 
+fn process(text: String, tc_ctx: &mut type_checker::Context, ev_ctx: &mut evaluator::Context) -> io::Result<()> {
+    let prog = parser::Parser::parse(text)?;
+    for stmt in prog.stmts {
+        tc_ctx.tc(&stmt).ok_or(std::io::Error::other("Typing error."))?;
+        ev_ctx.eval(&stmt).ok_or(std::io::Error::other("Evaluation error."))?;
+    }
+    Ok(())
+}
+
 fn repl() -> io::Result<()> {
     let stdin = io::stdin();
+    let mut tc_ctx = type_checker::Context::new();
+    let mut ev_ctx = evaluator::Context::new();
     loop {
         print!(">> ");
         io::stdout().flush()?;
         let line = stdin.lock().lines().next().unwrap().unwrap();
-        let mut tc_ctx = type_checker::Context::new();
-        let mut ev_ctx = evaluator::Context::new();
-        match parser::Parser::parse(line) {
-            Ok(prog) => {
-                match tc_ctx.tc(&prog) {
-                    Some(_) => {
-                        match ev_ctx.eval(&prog) {
-                            Some(_) => {}
-                            _ => println!("Evaluation failed."),
-                        }
-                    }
-                    _ => println!("Type checking failed."),
-                }
-            }
-            Err(err) => println!("Error while parsing! {:?}", err)
-        }
+        process(line, &mut tc_ctx, &mut ev_ctx)?;
     }
 }
 
@@ -56,20 +52,7 @@ fn interpret_file(file_path: &str) -> io::Result<()> {
     let source_code = get_text(file_path)?;
     let mut tc_ctx = type_checker::Context::new();
     let mut ev_ctx = evaluator::Context::new();
-    match parser::Parser::parse(source_code) {
-        Ok(prog) => {
-            match tc_ctx.tc(&prog) {
-                Some(_) => {
-                    match ev_ctx.eval(&prog) {
-                        Some(_) => {}
-                        _ => println!("Evaluatin failed."),
-                    }
-                }
-                _ => println!("Type checking failed."),
-            }
-        }
-        Err(err) => println!("Error while parsing! {:?}", err)
-    }
+    process(source_code, &mut tc_ctx, &mut ev_ctx)?;
     Ok(())
 }
 

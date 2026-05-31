@@ -142,6 +142,18 @@ impl From<LexError> for ParseError {
     }
 }
 
+impl From<ParseError> for std::io::Error {
+    fn from(err: ParseError) -> Self {
+        match err {
+            ParseError::UnrecognizedToken     => std::io::Error::other("Unrecognized token."),
+            ParseError::UnexpectedToken       => std::io::Error::other("Unexpected token."),
+            ParseError::SingleQuoteString     => std::io::Error::other("Single quote string."),
+            ParseError::UnclosedQuote         => std::io::Error::other("Unclosed quote."),
+            ParseError::ReservedIdentifier(_) => std::io::Error::other("Reserved identifier."),
+        }
+    }
+}
+
 type PrefixCont = for<'a> fn (&'a mut Parser) -> Result<Expr, ParseError>;
 type InfixCont = for<'a> fn (&'a mut Parser, Expr) -> Result<Expr, ParseError>;
 

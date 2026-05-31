@@ -46,12 +46,13 @@ impl Context {
              Type::Arrow(Box::new(Type::Char), Box::new(Type::Str)))
 
         ]);
-        Context { builtins, bindings_stack: vec![], curr_let_def: None }
+        //                                       Global context
+        Context { builtins, bindings_stack: vec![HashMap::new()], curr_let_def: None }
     }
 
     fn lookup(&self, id: &Id) -> Option<Type> {
-        for i in (0..self.bindings_stack.len()).rev() {
-            if let Some(t) = self.bindings_stack[i].get(id) {
+        for bindings in self.bindings_stack.iter().rev() {
+            if let Some(t) = bindings.get(id) {
                 return Some(t.clone());
             }
         }
