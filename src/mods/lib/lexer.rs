@@ -80,20 +80,60 @@ impl std::hash::Hash for Token {
     }
 }
 
-#[derive(PartialEq, Debug)]
-pub enum LexError { UnrecognizedToken, SingleQuoteString, UnclosedQuote }
+#[derive(PartialEq, Debug, Clone)]
+pub enum LexErrorKind {
+    UnrecognizedToken,
+    SingleQuoteString,
+    UnclosedQuote,
+    UnclosedDoubleQuote,
+}
+
+use LexErrorKind::*;
+
+pub struct LexError {
+    kind: LexErrorKind,
+    line: u32,
+    col: u32,
+}
+
+impl LexError {
+    pub fn kind(&self) -> LexErrorKind {
+        self.kind.clone()
+    }
+
+    pub fn line(&self) -> u32 {
+        self.line
+    }
+
+    pub fn col(&self) -> u32 {
+        self.col
+    }
+}
 
 use Token::*;
-use LexError::*;
 
 pub struct Lexer {
     input: Vec<u8>,
-    ptr: usize
+    ptr: usize,
+    line: u32,
+    col: u32,
 }
 
 impl Lexer {
     pub fn new(input: String) -> Self {
-        Lexer { input: input.as_bytes().to_vec(), ptr: 0 }
+        Lexer { input: input.as_bytes().to_vec(), ptr: 0, line: 1, col: 1, }
+    }
+
+    pub fn mk_error(&self, kind: LexErrorKind) -> LexError {
+        LexError { kind: kind, line: self.line, col: self.col }
+    }
+
+    pub fn line(&self) -> u32 {
+        self.line
+    }
+
+    pub fn col(&self) -> u32 {
+        self.col
     }
 
     fn is_space(byt: u8) -> bool {
@@ -113,6 +153,11 @@ impl Lexer {
             None
         } else {
             let ch = self.input[self.ptr] as char;
+            self.col += 1;
+            if ch == '\n' {
+                self.line += 1;
+                self.col = 1;
+            }
             self.ptr += 1;
             Some(ch)
         }
@@ -121,7 +166,13 @@ impl Lexer {
     fn read_while(&mut self, pred: fn(u8) -> bool) -> String {
         let mut bytes = vec![];
         while self.ptr < self.input.len() && pred(self.input[self.ptr]) {
-            bytes.push(self.input[self.ptr]);
+            let ch = self.input[self.ptr];
+            bytes.push(ch);
+            self.col += 1;
+            if ch == b'\n' {
+                self.line += 1;
+                self.col = 1;
+            }
             self.ptr += 1;
         }
         let escaped_tok = String::from_utf8(bytes).unwrap();
@@ -131,6 +182,11 @@ impl Lexer {
 
     fn get_next_aux(&mut self) -> Result<Token, LexError> {
         while self.ptr < self.input.len() && Self::is_space(self.input[self.ptr]) {
+            self.col += 1;
+            if self.input[self.ptr] == b'\n' {
+                self.line += 1;
+                self.col = 1;
+            }
             self.ptr += 1;
         }
         let ch = match self.read_char() {
@@ -181,17 +237,17 @@ impl Lexer {
             // TODO: Don't accept line break inside single or double quote
             '\'' => {
                 // TODO: `c` must be escaped if necessary
-                let c = self.read_char().ok_or(UnclosedQuote)?;
-                let q = self.read_char().ok_or(UnclosedQuote)?;
+                let c = self.read_char().ok_or(self.mk_error(UnclosedQuote))?;
+                let q = self.read_char().ok_or(self.mk_error(UnclosedQuote))?;
                 if q != '\'' {
-                    Err(SingleQuoteString)
+                    Err(self.mk_error(SingleQuoteString))
                 } else {
                     Ok(CharLit(c))
                 }
             }
             '\"' => {
                 let s = self.read_while(|b: u8| { b != b'\"' });
-                let _ = self.read_char();
+                let _ = self.read_char().ok_or(self.mk_error(UnclosedDoubleQuote))?;
                 Ok(StrLit(s))
             },
             'a'..='z' | 'A'..='Z' | '_' => {
@@ -219,10 +275,10 @@ impl Lexer {
                 let num_str = String::from(ch) + &rest;
                 match num_str.parse::<i64>() {
                     Ok(num) => Ok(IntLit(num)),
-                    Err(_) => Err(UnrecognizedToken) // TODO: Create a token error for this
+                    Err(_) => Err(self.mk_error(UnrecognizedToken)) // TODO: Create a token error for this
                 }
             }
-            _ => Err(UnrecognizedToken),
+            _ => Err(self.mk_error(UnrecognizedToken)),
         }
     }
 
@@ -236,7 +292,7 @@ impl Lexer {
 mod tests {
     use super::Lexer;
     use super::Token::*;
-    use super::LexError::*;
+    use super::LexErrorKind::*;
 
     #[test]
     fn tokenize_simple_program() {
@@ -255,12 +311,15 @@ mod tests {
             match tkn.get_next_token() {
                 Ok(Eof) => { break; }
                 Ok(tk)  => { tokens.push(tk); }
-                Err(UnrecognizedToken) => panic!("Unexpected error in tokenizer"),
-                Err(SingleQuoteString) => panic!("Strings cannot be enclosed by a single quote"),
-                Err(UnclosedQuote)     => panic!("Unclosed quote"),
+                Err(lex_err) =>
+                    match lex_err.kind {
+                        UnrecognizedToken   => panic!("Unexpected error in tokenizer"),
+                        SingleQuoteString   => panic!("Strings cannot be enclosed by a single quote"),
+                        UnclosedQuote       => panic!("Unclosed quote"),
+                        UnclosedDoubleQuote => panic!("Unclosed double quote"),
+                    }
             }
         }
-        println!("{:?}", tokens);
         assert!(tokens ==
           [Let, Identifier("dummy".to_string()), Assign, CharLit('a'), Semicolon,
            Let, Identifier("dummy_str".to_string()), Assign, StrLit("foo".to_string()), Semicolon,
