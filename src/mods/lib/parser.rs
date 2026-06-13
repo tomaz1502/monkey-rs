@@ -432,7 +432,6 @@ impl Parser {
             },
             t => Err(self.mk_error(ParseErrorKind::UnexpectedToken("string".to_string(), t))),
         };
-        self.advance_token()?;
         return answer;
     }
 
