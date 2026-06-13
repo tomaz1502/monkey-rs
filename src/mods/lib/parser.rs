@@ -64,17 +64,20 @@ use lexer::{ LexError, LexErrorKind };
 
 impl PrefixOperator {
     fn from_curr_tok(parser: &Parser) -> Result<Self, ParseError> {
-        match parser.curr_token {
+        match &parser.curr_token {
             lexer::Token::Bang  => Ok(PrefixOperator::Bang),
             lexer::Token::Minus => Ok(PrefixOperator::Minus),
-            _                   => Err(parser.mk_error(ParseErrorKind::UnexpectedToken)) // TODO: Specify expected and what you got in the error
+            t                   => {
+                let kind = ParseErrorKind::UnexpectedToken("unary operator".to_string(), t.clone());
+                Err(parser.mk_error(kind))
+            }
         }
     }
 }
 
 impl InfixOperator {
     fn from_curr_tok(parser: &Parser) -> Result<Self, ParseError> {
-        match parser.curr_token {
+        match &parser.curr_token {
             lexer::Token::Plus    => Ok(InfixOperator::Plus),
             lexer::Token::Minus   => Ok(InfixOperator::Minus),
             lexer::Token::Mult    => Ok(InfixOperator::Mult),
@@ -84,7 +87,10 @@ impl InfixOperator {
             lexer::Token::GT      => Ok(InfixOperator::GT),
             lexer::Token::Eq      => Ok(InfixOperator::Eq),
             lexer::Token::Neq     => Ok(InfixOperator::Neq),
-            _                     => Err(parser.mk_error(ParseErrorKind::UnexpectedToken)) // TODO: Should we have another parse error here?
+            t                     => {
+                let kind = ParseErrorKind::UnexpectedToken("binary operator".to_string(), t.clone());
+                Err(parser.mk_error(kind))
+            }
         }
     }
 }
@@ -123,7 +129,8 @@ impl lexer::Token {
 #[derive(Debug, Clone)]
 pub enum ParseErrorKind {
     UnrecognizedToken,
-    UnexpectedToken,
+    // NOTE: The first argument should the "token category" which doesn't exist yet
+    UnexpectedToken(String, lexer::Token),
     SingleQuoteString,
     UnclosedQuote,
     UnclosedDoubleQuote,
@@ -134,13 +141,13 @@ pub enum ParseErrorKind {
 impl std::fmt::Display for ParseErrorKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg: String = match self {
-            Self::UnrecognizedToken      => String::from("unrecognized token."),
-            Self::UnexpectedToken        => String::from("unexpected token."),
-            Self::SingleQuoteString      => String::from("String enclosed with a single quote."),
-            Self::UnclosedQuote          => String::from("Single quote was not closed."),
-            Self::UnclosedDoubleQuote    => String::from("Double quote was not closed."),
-            Self::ExpectedSemicolon      => String::from("Expected semicolon."),
-            Self::ReservedIdentifier(id) => std::format!("let statement with reserved identifier: {}", id),
+            Self::UnrecognizedToken         => String::from("Unrecognized token."),
+            Self::UnexpectedToken(exp, got) => std::format!("Unexpected token. Expected: {}, got: {}", exp, got),
+            Self::SingleQuoteString         => String::from("String enclosed with a single quote."),
+            Self::UnclosedQuote             => String::from("Single quote was not closed."),
+            Self::UnclosedDoubleQuote       => String::from("Double quote was not closed."),
+            Self::ExpectedSemicolon         => String::from("Expected semicolon."),
+            Self::ReservedIdentifier(id)    => std::format!("let statement with reserved identifier: {}", id),
         };
         write!(f, "{}", msg)
     }
@@ -266,19 +273,19 @@ impl Parser {
         Ok(())
     }
 
-    fn expect_token(&self, tok: lexer::Token, err: Option<ParseErrorKind>) -> Result<(), ParseError> {
+    fn expect_token(&self, tok: lexer::Token) -> Result<(), ParseError> {
         if self.curr_token == tok {
             Ok(())
         } else {
-            let err = err.unwrap_or(ParseErrorKind::UnexpectedToken);
-            Err(self.mk_error(err))
+            let kind = ParseErrorKind::UnexpectedToken(tok.to_string(), self.curr_token.clone());
+            Err(self.mk_error(kind))
         }
     }
 
     fn parse_group(&mut self) -> Result<Expr, ParseError> {
         self.advance_token()?;
         let expr = self.parse_expr()?;
-        self.expect_token(RPar, None)?;
+        self.expect_token(RPar)?;
         self.advance_token()?;
         Ok(expr)
     }
@@ -310,7 +317,10 @@ impl Parser {
             BoolType => Ok(Type::Boolean),
             UnitType => Ok(Type::Unit),
             StrType  => Ok(Type::Str),
-            _    => Err(self.mk_error(ParseErrorKind::UnexpectedToken))
+            _    => {
+                let kind = ParseErrorKind::UnexpectedToken("type".to_string(), tk.clone());
+                Err(self.mk_error(kind))
+            }
         }
     }
 
@@ -329,12 +339,12 @@ impl Parser {
 
     fn parse_lambda(&mut self) -> Result<Expr, ParseError> {
         self.advance_token()?; // fn
-        self.expect_token(LPar, None)?;
+        self.expect_token(LPar)?;
         self.advance_token()?;
         let mut params = vec![];
         while let Identifier(id) = self.curr_token.clone() {
             self.advance_token()?;
-            self.expect_token(Colon, None)?;
+            self.expect_token(Colon)?;
             self.advance_token()?;
             let typ = self.parse_type()?;
             params.push((id, typ));
@@ -344,9 +354,9 @@ impl Parser {
                 break;
             }
         }
-        self.expect_token(RPar, None)?;
+        self.expect_token(RPar)?;
         self.advance_token()?;
-        self.expect_token(ArrowType, None)?;
+        self.expect_token(ArrowType)?;
         self.advance_token()?;
         let ret = self.parse_type()?;
         let body = self.parse_block()?;
@@ -368,7 +378,7 @@ impl Parser {
         if args.is_empty() {
             args.push(Expr::Unit);
         }
-        self.expect_token(RPar, None)?;
+        self.expect_token(RPar)?;
         self.advance_token()?;
         Ok(Expr::Call(Box::new(f), args))
     }
@@ -376,7 +386,7 @@ impl Parser {
     fn parse_indexed_access(&mut self, arr: Expr) -> Result<Expr, ParseError> {
         self.advance_token()?;
         let idx = self.parse_expr()?;
-        self.expect_token(RSqBrack, None)?;
+        self.expect_token(RSqBrack)?;
         self.advance_token()?;
         Ok(Expr::IndexedAccess(Box::new(arr), Box::new(idx)))
     }
@@ -415,13 +425,13 @@ impl Parser {
     }
 
     fn parse_string(&mut self) -> Result<Expr, ParseError> {
-        let mut answer = Err(self.mk_error(ParseErrorKind::UnexpectedToken));
-        match self.curr_token {
-            StrLit(ref s) => {
-                answer = Ok(Expr::Str(s.clone()));
-            }
-            _ => {},
-        }
+        let answer = match self.curr_token.clone() {
+            StrLit(s) => {
+                self.advance_token()?;
+                Ok(Expr::Str(s))
+            },
+            t => Err(self.mk_error(ParseErrorKind::UnexpectedToken("string".to_string(), t))),
+        };
         self.advance_token()?;
         return answer;
     }
@@ -442,33 +452,41 @@ impl Parser {
     }
 
     fn parse_id_expr(&mut self) -> Result<Expr, ParseError> {
-        match &self.curr_token {
+        match self.curr_token.clone() {
             Identifier(name) => {
-                let name_cln = name.clone();
                 self.advance_token()?;
-                Ok(Expr::Ident(name_cln))
+                Ok(Expr::Ident(name))
             }
-            _ => Err(self.mk_error(ParseErrorKind::UnexpectedToken))
+            t => {
+                let kind = ParseErrorKind::UnexpectedToken("identifier".to_string(), t);
+                Err(self.mk_error(kind))
+            }
         }
     }
 
     fn parse_id(&mut self) -> Result<String, ParseError> {
-        match &self.curr_token {
+        match self.curr_token.clone() {
             Identifier(name) => {
-                let name_cln = name.clone();
                 self.advance_token()?;
-                Ok(name_cln)
+                Ok(name)
             }
-            _ => Err(self.mk_error(ParseErrorKind::UnexpectedToken))
+            t => {
+                let kind = ParseErrorKind::UnexpectedToken("identifier".to_string(), t);
+                Err(self.mk_error(kind))
+            }
         }
     }
 
     fn parse_expr_prec(&mut self, prec: Precedence) -> Result<Expr, ParseError> {
         let prefix_fn =
-            self.prefix_fn_map
-                .get(&self.curr_token)
-                // A token without a prefix function - maybe a different kind of parse error
-                .ok_or(self.mk_error(ParseErrorKind::UnexpectedToken))?;
+            match self.prefix_fn_map.get(&self.curr_token) {
+                Some(f) => f,
+                None => {
+                    let msg = "token registered as a prefix for an expression";
+                    let kind = ParseErrorKind::UnexpectedToken(msg.to_string(), self.curr_token.clone());
+                    return Err(self.mk_error(kind));
+                }
+            };
         let mut left_expr = prefix_fn(self)?;
 
         loop {
@@ -508,7 +526,7 @@ impl Parser {
             return Err(self.mk_error(ParseErrorKind::ReservedIdentifier(id)));
         }
 
-        self.expect_token(Assign, None)?;
+        self.expect_token(Assign)?;
         self.advance_token()?;
         let expr = self.parse_expr()?;
         Ok(Stmt::Let(id, expr))
@@ -531,7 +549,7 @@ impl Parser {
             _ => self.parse_expr_stmt(),
 
         };
-        self.expect_token(Semicolon, Some(ParseErrorKind::ExpectedSemicolon))?;
+        self.expect_token(Semicolon)?;
         self.advance_token()?;
         stmt
     }

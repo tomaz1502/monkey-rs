@@ -26,7 +26,6 @@ fn process(text: String,
            ev_ctx: &mut evaluator::Context)
            -> Result<(), String> {
     let prog = parser::Parser::parse(text)?;
-    println!("prog = {prog:?}");
     for stmt in prog.stmts {
         tc_ctx.tc(&stmt).ok_or("Typing error.".to_string())?;
         ev_ctx.eval(&stmt).ok_or("Evaluation error.".to_string())?;

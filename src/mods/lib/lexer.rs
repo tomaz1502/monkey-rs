@@ -62,6 +62,12 @@ impl Token {
     }
 }
 
+impl std::fmt::Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 // we can't derive because we need Id(_) = Id(_) and Integer(_) = Integer(_) for the hashmap
 // note that this is effectively changing the behaviour of `t1 == t2` for tokens, but we
 // only compare tokens for their discriminant in the parser. but maybe we should take more
