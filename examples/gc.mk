@@ -4,5 +4,5 @@ let counter = fn(x : int) -> bool {
     } else {
 		let foobar = 9999;
 		counter(x + 1);
-    }
+    };
 };

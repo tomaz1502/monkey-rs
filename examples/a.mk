@@ -2,7 +2,7 @@ let x = 42;
 let y = 23;
 
 if (x == 42) {
-	y
+	y;
 } else {
-	x
-}
+	x;
+};

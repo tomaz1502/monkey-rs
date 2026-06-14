@@ -1,7 +1,7 @@
 let x = 'a';
 let y = 'a';
 if (x == y) {
-	true
+	true;
 } else {
-	false
-}
+	false;
+};

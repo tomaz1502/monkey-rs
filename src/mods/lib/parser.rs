@@ -539,18 +539,18 @@ impl Parser {
 
     fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
         let stmt = match self.curr_token {
-            Let => self.parse_let(),
-            Return => self.parse_return(),
+            Let => self.parse_let()?,
+            Return => self.parse_return()?,
             LBrack => {
                 let block = self.parse_block()?;
-                Ok(Stmt::Block(block))
+                Stmt::Block(block)
             },
-            _ => self.parse_expr_stmt(),
+            _ => self.parse_expr_stmt()?,
 
         };
         self.expect_token(Semicolon)?;
         self.advance_token()?;
-        stmt
+        Ok(stmt)
     }
 
     fn parse_block(&mut self) -> Result<Block, ParseError> {

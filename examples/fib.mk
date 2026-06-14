@@ -6,8 +6,8 @@ let fib = fn (n : int) -> int {
 			return 01;
 		} else {
 			return fib(n - 1) + fib(n - 2);
-		}
-    }
+		};
+    };
 };
 
 fib(8);

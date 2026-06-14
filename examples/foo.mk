@@ -4,7 +4,7 @@ let f =
 			return "foo\n";
 		} else {
 			return "bar\n";
-		}
+		};
 	};
 
 print(f(2));

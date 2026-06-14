@@ -3,7 +3,7 @@ let counter = fn (x : int) -> int {
 		return counter(x + 1);
 	} else {
 		return x;
-	}
+	};
 };
 
 counter(2);

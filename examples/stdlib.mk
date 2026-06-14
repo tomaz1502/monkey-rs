@@ -22,7 +22,7 @@ let strOfDigit =
             return "9";
         } else {
             return "error";
-        }
+        };
     };
 
 let strOfInt =
@@ -35,7 +35,7 @@ let strOfInt =
             let r = strOfInt(i / 10);
             let c = strOfDigit(i % 10);
             return concat(r, c);
-        }
+        };
     };
 
 print(strOfInt(-128));
