@@ -108,7 +108,7 @@ impl Evaluate<Expr> for Context {
                             let id = params[i].0.clone();
                             cur_bindings.push((id, arg));
                         }
-                        self.scope_eval(cur_bindings, &body)
+                        self.scope_eval(cur_bindings, body)
                     }
                     Expr::Ident(caller) => {
                         match &caller[..] {

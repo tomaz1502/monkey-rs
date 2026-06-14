@@ -191,7 +191,7 @@ impl From<LexErrorKind> for ParseErrorKind {
 impl From<LexError> for ParseError {
     fn from(err: LexError) -> Self {
         let kind: ParseErrorKind = From::from(err.kind());
-        ParseError { kind: kind, line: err.line(), col: err.col() }
+        ParseError { kind, line: err.line(), col: err.col() }
     }
 }
 
@@ -233,18 +233,18 @@ impl Parser {
     }
 
     fn mk_error(&self, kind: ParseErrorKind) -> ParseError {
-        ParseError { kind: kind, line: self.lexer.line(), col: self.lexer.col() }
+        ParseError { kind, line: self.lexer.line(), col: self.lexer.col() }
     }
 
     fn parse_prefix_op(&mut self) -> Result<Expr, ParseError> {
-        let op = PrefixOperator::from_curr_tok(&self)?;
+        let op = PrefixOperator::from_curr_tok(self)?;
         self.advance_token()?;
         let rhs = self.parse_expr_prec(Precedence::Prefix)?;
         Ok(Expr::PrefixOp(op, Box::new(rhs)))
     }
 
     fn parse_infix_op(&mut self, lhs: Expr) -> Result<Expr, ParseError> {
-        let op = InfixOperator::from_curr_tok(&self)?;
+        let op = InfixOperator::from_curr_tok(self)?;
         let prec = self.curr_token.prec();
         self.advance_token()?;
         let rhs = self.parse_expr_prec(prec)?;
@@ -408,14 +408,13 @@ impl Parser {
     }
 
     fn parse_string(&mut self) -> Result<Expr, ParseError> {
-        let answer = match self.curr_token.clone() {
+        match self.curr_token.clone() {
             StrLit(s) => {
                 self.advance_token()?;
                 Ok(Expr::Str(s))
             },
             t => Err(self.mk_error(ParseErrorKind::UnexpectedToken("string".to_string(), t))),
-        };
-        return answer;
+        }
     }
 
     /* We should have a single function parse literal for integer and bool and string */

@@ -106,7 +106,7 @@ impl Lexer {
     }
 
     pub fn mk_error(&self, kind: LexErrorKind) -> LexError {
-        LexError { kind: kind, line: self.line, col: self.col }
+        LexError { kind, line: self.line, col: self.col }
     }
 
     pub fn line(&self) -> u32 {
@@ -157,8 +157,7 @@ impl Lexer {
             self.ptr += 1;
         }
         let escaped_tok = String::from_utf8(bytes).unwrap();
-        let tok = unescape(&escaped_tok);
-        tok
+        unescape(&escaped_tok)
     }
 
     fn get_next_aux(&mut self) -> Result<Token, LexError> {

@@ -1,4 +1,4 @@
-pub static RESERVED_WORDS : [&'static str; 17] =
+pub static RESERVED_WORDS : [&str; 17] =
   [ "len"
   , "print"
   , "read"
@@ -18,7 +18,7 @@ pub static RESERVED_WORDS : [&'static str; 17] =
   , "getSlice"
   ];
 
-pub fn unescape(input: &String) -> String {
+pub fn unescape(input: &str) -> String {
     let mut out = String::new();
     let mut chars = input.chars();
 
