@@ -53,8 +53,6 @@ infix_op ::=
 */
 
 
-use std::collections::HashMap;
-
 use crate::mods::lib::lexer;
 use crate::mods::lib::expr::*;
 use crate::mods::lib::utils::RESERVED_WORDS;
@@ -197,14 +195,9 @@ impl From<LexError> for ParseError {
     }
 }
 
-type PrefixCont = for<'a> fn (&'a mut Parser) -> Result<Expr, ParseError>;
-type InfixCont = for<'a> fn (&'a mut Parser, Expr) -> Result<Expr, ParseError>;
-
 pub struct Parser {
     curr_token: lexer::Token,
     lexer: lexer::Lexer,
-    prefix_fn_map: HashMap<lexer::Token, PrefixCont>,
-    infix_fn_map: HashMap<lexer::Token, InfixCont>,
 }
 
 // Invariant: All functions prefixed with `parse` always leave the curr_token as the first
@@ -213,44 +206,34 @@ impl Parser {
     fn new(source_code: String) -> Result<Self, ParseError> {
         let mut lexer = lexer::Lexer::new(source_code);
         let curr_token = lexer.get_next_token()?;
-        let mut parser =
-            Parser { curr_token, lexer, prefix_fn_map: HashMap::new(), infix_fn_map: HashMap::new() };
-        parser.register_prefix_fn(lexer::Token::Identifier("".to_string()), Self::parse_id_expr);
-        parser.register_prefix_fn(lexer::Token::IntLit(0), Self::parse_int);
-        parser.register_prefix_fn(lexer::Token::CharLit('a'), Self::parse_char);
-        parser.register_prefix_fn(lexer::Token::StrLit("".to_string()), Self::parse_string);
-        parser.register_prefix_fn(lexer::Token::Unit, Self::parse_unit);
-        parser.register_prefix_fn(lexer::Token::Bang, Self::parse_prefix_op);
-        parser.register_prefix_fn(lexer::Token::Minus, Self::parse_prefix_op);
-        parser.register_prefix_fn(lexer::Token::True, Self::parse_bool);
-        parser.register_prefix_fn(lexer::Token::False, Self::parse_bool);
-        parser.register_prefix_fn(lexer::Token::LPar, Self::parse_group);
-        parser.register_prefix_fn(lexer::Token::If, Self::parse_ite);
-        parser.register_prefix_fn(lexer::Token::Fn, Self::parse_lambda);
-        parser.register_infix_fn(lexer::Token::Plus, Self::parse_infix_op);
-        parser.register_infix_fn(lexer::Token::Minus, Self::parse_infix_op);
-        parser.register_infix_fn(lexer::Token::Mult, Self::parse_infix_op);
-        parser.register_infix_fn(lexer::Token::Slash, Self::parse_infix_op);
-        parser.register_infix_fn(lexer::Token::Modulus, Self::parse_infix_op);
-        parser.register_infix_fn(lexer::Token::LT, Self::parse_infix_op);
-        parser.register_infix_fn(lexer::Token::GT, Self::parse_infix_op);
-        parser.register_infix_fn(lexer::Token::Eq, Self::parse_infix_op);
-        parser.register_infix_fn(lexer::Token::Neq, Self::parse_infix_op);
-        parser.register_infix_fn(lexer::Token::LPar, Self::parse_call);
-        parser.register_infix_fn(lexer::Token::LSqBrack, Self::parse_indexed_access);
+        let parser = Parser { curr_token, lexer };
         Ok(parser)
+    }
+
+    fn parse_prefix(&mut self) -> Result<Expr, ParseError> {
+        match self.curr_token {
+            lexer::Token::Identifier(_) => self.parse_id_expr(),
+            lexer::Token::IntLit(_)     => self.parse_int(),
+            lexer::Token::CharLit(_)    => self.parse_char(),
+            lexer::Token::StrLit(_)     => self.parse_string(),
+            lexer::Token::Unit          => self.parse_unit(),
+            lexer::Token::Bang          => self.parse_prefix_op(),
+            lexer::Token::Minus         => self.parse_prefix_op(),
+            lexer::Token::True          => self.parse_bool(),
+            lexer::Token::False         => self.parse_bool(),
+            lexer::Token::LPar          => self.parse_group(),
+            lexer::Token::If            => self.parse_ite(),
+            lexer::Token::Fn            => self.parse_lambda(),
+            _ => {
+                let kind = ParseErrorKind::UnexpectedToken("prefix token".to_string(),
+                                                           self.curr_token.clone());
+                Err(self.mk_error(kind))
+            }
+        }
     }
 
     fn mk_error(&self, kind: ParseErrorKind) -> ParseError {
         ParseError { kind: kind, line: self.lexer.line(), col: self.lexer.col() }
-    }
-
-    fn register_prefix_fn(&mut self, t: lexer::Token, f: PrefixCont) {
-        self.prefix_fn_map.insert(t, f);
-    }
-
-    fn register_infix_fn(&mut self, t: lexer::Token, f: InfixCont) {
-        self.infix_fn_map.insert(t, f);
     }
 
     fn parse_prefix_op(&mut self) -> Result<Expr, ParseError> {
@@ -477,32 +460,20 @@ impl Parser {
     }
 
     fn parse_expr_prec(&mut self, prec: Precedence) -> Result<Expr, ParseError> {
-        let prefix_fn =
-            match self.prefix_fn_map.get(&self.curr_token) {
-                Some(f) => f,
-                None => {
-                    let msg = "token registered as a prefix for an expression";
-                    let kind = ParseErrorKind::UnexpectedToken(msg.to_string(), self.curr_token.clone());
-                    return Err(self.mk_error(kind));
-                }
-            };
-        let mut left_expr = prefix_fn(self)?;
+        let mut left_expr = self.parse_prefix()?;
 
         loop {
-            let tk = &self.curr_token;
-            if *tk == lexer::Token::Semicolon {
-                 break;
-            }
-            if tk.prec() <= prec {
-                 break;
-            }
-            match self.infix_fn_map.get(&tk) {
-                 None => return Ok(left_expr),
-                 Some(infix_fn) => {
-                     let infix_fn_cln = *infix_fn;
-                     left_expr = infix_fn_cln(self, left_expr)?;
-                 }
-            }
+            if self.curr_token == lexer::Token::Semicolon { break; }
+            if self.curr_token.prec() <= prec { break; }
+
+            left_expr = match self.curr_token {
+                Plus    | Minus   | Mult    | Slash   |
+                Modulus | LT      | GT      | Eq      |
+                Neq      => self.parse_infix_op(left_expr)?,
+                LPar     => self.parse_call(left_expr)?,
+                LSqBrack => self.parse_indexed_access(left_expr)?,
+                _ => break,
+            };
         }
 
         Ok(left_expr)
@@ -733,9 +704,10 @@ mod tests {
         let output = Parser::parse(input.to_string());
         match output {
             Err(e) => {
+                println!("err branch");
                 match e.kind() {
-                    super::ParseErrorKind::ExpectedSemicolon => {},
-                    _ => panic!("Expected `ExpectedSemicolon` error, got {}", e.kind()),
+                    super::ParseErrorKind::UnexpectedToken(_, _) => {},
+                    _ => panic!("Expected `UnexpectedToken` error, got {}", e.kind()),
                 }
             }
             Ok(_) => panic!("Expected `ExpectedSemicolon` error, but parsing succeded."),

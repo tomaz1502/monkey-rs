@@ -1,7 +1,6 @@
 use crate::mods::lib::utils::unescape;
-use std::hash::Hasher;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[repr(u8)]
 pub enum Token {
     // Identifiers and literals
@@ -56,33 +55,9 @@ pub enum Token {
     Eof
 }
 
-impl Token {
-    fn discriminant(&self) -> u8 {
-        unsafe { *<*const _>::from(self).cast::<u8>() }
-    }
-}
-
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
-    }
-}
-
-// we can't derive because we need Id(_) = Id(_) and Integer(_) = Integer(_) for the hashmap
-// note that this is effectively changing the behaviour of `t1 == t2` for tokens, but we
-// only compare tokens for their discriminant in the parser. but maybe we should take more
-// care?
-impl PartialEq for Token {
-    fn eq(&self, other: &Token) -> bool {
-        self.discriminant() == other.discriminant()
-    }
-}
-
-impl std::cmp::Eq for Token {}
-
-impl std::hash::Hash for Token {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write_u8(self.discriminant());
     }
 }
 
