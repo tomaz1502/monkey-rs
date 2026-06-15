@@ -40,12 +40,12 @@ impl Context {
             cur_bindings.insert(id, typ);
         }
         self.bindings_stack.push(cur_bindings);
-        let mut res = Some(EvalResult::Unit);
+        let mut res = EvalResult::Unit;
         for stmt in &block.stmts {
-            res = self.eval(stmt);
+            res = self.eval(stmt)?;
         }
         self.bindings_stack.pop();
-        res
+        Some(res)
     }
 }
 

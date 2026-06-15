@@ -73,12 +73,12 @@ impl Context {
             cur_bindings.insert(id, typ);
         }
         self.bindings_stack.push(cur_bindings);
-        let mut typ = Some(Type::Unit);
+        let mut typ = Type::Unit;
         for stmt in &block.stmts {
-            typ = self.tc(stmt);
+            typ = self.tc(stmt)?;
         }
         self.bindings_stack.pop();
-        typ
+        Some(typ)
     }
 }
 
