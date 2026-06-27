@@ -28,7 +28,7 @@ fn process(text: String,
     let prog = parser::Parser::parse(text)?;
     for stmt in prog.stmts {
         tc_ctx.tc(&stmt).ok_or("Typing error.".to_string())?;
-        ev_ctx.eval(&stmt).ok_or("Evaluation error.".to_string())?;
+        ev_ctx.eval(&stmt).map_err(|_| "Evaluation error.".to_string())?;
     }
     Ok(())
 }

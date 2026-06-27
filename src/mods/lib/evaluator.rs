@@ -14,6 +14,11 @@ pub enum EvalResult {
     Lambda(Vec<(Id, Type)>, Type, Block),
 }
 
+pub enum EvalSignal {
+    EarlyReturn(EvalResult),
+    RuntimeError,
+}
+
 #[derive(Clone)]
 pub struct Context {
     pub bindings_stack: Vec<HashMap<Id, EvalResult>>,
@@ -34,32 +39,33 @@ impl Context {
         None
     }
 
-    pub fn scope_eval(&mut self, bindings: Vec<(Id, EvalResult)>, block: &Block) -> Option<(EvalResult, bool)> {
+    pub fn scope_eval(&mut self, bindings: Vec<(Id, EvalResult)>, block: &Block) -> Result<EvalResult, EvalSignal> {
         let mut cur_bindings = HashMap::new();
         for (id, typ) in bindings {
             cur_bindings.insert(id, typ);
         }
         self.bindings_stack.push(cur_bindings);
-        let mut res = (EvalResult::Unit, false);
+        let mut res = Ok(EvalResult::Unit);
         for stmt in &block.stmts {
-            res = self.eval(stmt)?;
-            if res.1 {
-                self.bindings_stack.pop();
-                return Some(res);
-            }
+            match self.eval(stmt) {
+                Err(err) => {
+                    res = Err(err);
+                    break;
+                }
+                cur_res => { res = cur_res; }
+            };
         }
         self.bindings_stack.pop();
-        Some(res)
+        res
     }
 }
 
 pub trait Evaluate<T> {
-    // TODO: Should be result
-    fn eval(&mut self, t: &T) -> Option<(EvalResult, bool)>;
+    fn eval(&mut self, t: &T) -> Result<EvalResult, EvalSignal>;
 }
 
 impl Evaluate<Stmt> for Context {
-    fn eval(&mut self, stmt: &Stmt) -> Option<(EvalResult, bool)> {
+    fn eval(&mut self, stmt: &Stmt) -> Result<EvalResult, EvalSignal> {
         match stmt {
             Stmt::Let(id, expr) => {
                 let res = self.eval(expr)?;
@@ -67,12 +73,12 @@ impl Evaluate<Stmt> for Context {
                   .bindings_stack
                   .last_mut()
                   .expect("let without a context")
-                  .insert(id.clone(), res.0);
-                Some((EvalResult::Unit, false))
+                  .insert(id.clone(), res);
+                Ok(EvalResult::Unit)
             }
             Stmt::Return(expr)  => {
-                let (val, _) = self.eval(expr)?;
-                return Some((val, true));
+                let val = self.eval(expr)?;
+                return Err(EvalSignal::EarlyReturn(val));
             }
             Stmt::Expr(expr)    => self.eval(expr),
             Stmt::Block(block)  => {
@@ -84,39 +90,31 @@ impl Evaluate<Stmt> for Context {
 
 // The only reason we have to return the early return flag here is because if is an expression
 impl Evaluate<Expr> for Context {
-    fn eval(&mut self, expr: &Expr) -> Option<(EvalResult, bool)> {
+    fn eval(&mut self, expr: &Expr) -> Result<EvalResult, EvalSignal> {
         match expr {
-            Expr::Integer(i) => Some((EvalResult::Integer(*i), false)),
-            Expr::Boolean(b) => Some((EvalResult::Boolean(*b), false)),
-            Expr::Char(c)    => Some((EvalResult::Char(*c), false)),
-            Expr::Str(s)     => Some((EvalResult::Str(s.clone()), false)),
-            Expr::Unit       => Some((EvalResult::Unit, false)),
+            Expr::Integer(i) => Ok(EvalResult::Integer(*i)),
+            Expr::Boolean(b) => Ok(EvalResult::Boolean(*b)),
+            Expr::Char(c)    => Ok(EvalResult::Char(*c)),
+            Expr::Str(s)     => Ok(EvalResult::Str(s.clone())),
+            Expr::Unit       => Ok(EvalResult::Unit),
             Expr::Ident(id) => {
-                let val = self.lookup(id)?;
-                return Some((val, false));
+                let val = self.lookup(id).ok_or(EvalSignal::RuntimeError)?;
+                return Ok(val);
             }
             Expr::Ite(cond, t, opt_e) =>
                 match self.eval(&**cond)? {
-                    // TODO: The typech
-                    (val, true) => return Some((val, true)),
-                    (EvalResult::Boolean(true), false) => self.scope_eval(vec![], t),
-                    (EvalResult::Boolean(false), false) => {
+                    EvalResult::Boolean(true) => self.scope_eval(vec![], t),
+                    EvalResult::Boolean(false) => {
                         match opt_e {
-                            None => Some((EvalResult::Unit, false)),
+                            None => Ok(EvalResult::Unit),
                             Some(e) => self.scope_eval(vec![], e),
                         }
                     }
-                    _ => None,
+                    _ => Err(EvalSignal::RuntimeError), // unreachable (type checker)
                 },
-            Expr::Lambda(params, ret, body) => Some((EvalResult::Lambda(params.clone(), ret.clone(), body.clone()), false)),
+            Expr::Lambda(params, ret, body) => Ok(EvalResult::Lambda(params.clone(), ret.clone(), body.clone())),
             Expr::Call(caller, args) => {
-                let mut evaluated_args: Vec<EvalResult> = Vec::new();
-                for arg in args.iter() {
-                    match self.eval(arg)? {
-                        (val, true) => return Some((val, true)),
-                        (val, false) => evaluated_args.push(val),
-                    };
-                }
+                let evaluated_args = args.iter().map(|arg| self.eval(arg)).collect::<Result<Vec<_>, _>>()?;
                 match &**caller {
                     Expr::Lambda(params, _, body) => {
                         // TODO: abstract this code
@@ -128,8 +126,10 @@ impl Evaluate<Expr> for Context {
                             cur_bindings.push((id, arg));
                         }
                         // Here is the limit of propagation for the return flag
-                        let (val, _) = self.scope_eval(cur_bindings, body)?;
-                        Some((val, false))
+                        match self.scope_eval(cur_bindings, body) {
+                            Err(EvalSignal::EarlyReturn(val)) => Ok(val),
+                            result => result,
+                        }
                     }
                     Expr::Ident(caller) => {
                         match &caller[..] {
@@ -140,7 +140,7 @@ impl Evaluate<Expr> for Context {
                                 match &evaluated_args[..] {
                                     [EvalResult::Str(s)] => {
                                         print!("{}", s);
-                                        Some((EvalResult::Unit, false))
+                                        Ok(EvalResult::Unit)
                                     },
                                     _ => unreachable!("impossible (TC)")
                                 }
@@ -148,11 +148,11 @@ impl Evaluate<Expr> for Context {
                             "read" => {
                                 let mut s = String::new();
                                 std::io::stdin().read_line(&mut s).unwrap();
-                                Some((EvalResult::Str(s), false))
+                                Ok(EvalResult::Str(s))
                             }
                             "len" => {
                                 match &evaluated_args[..] {
-                                    [EvalResult::Str(s)] => Some((EvalResult::Integer(s.len() as i64), false)),
+                                    [EvalResult::Str(s)] => Ok(EvalResult::Integer(s.len() as i64)),
                                     _ => unreachable!("impossible (TC)")
                                 }
                             }
@@ -160,7 +160,7 @@ impl Evaluate<Expr> for Context {
                                 match &evaluated_args[..] {
                                     [EvalResult::Str(s), EvalResult::Integer(i), EvalResult::Integer(j)] => {
                                         let t = String::from(&s[(*i as usize)..(*j as usize)]);
-                                        Some((EvalResult::Str(t), false))
+                                        Ok(EvalResult::Str(t))
                                     }
                                     _ => unreachable!("impossible (TC)")
                                 }
@@ -168,7 +168,7 @@ impl Evaluate<Expr> for Context {
                             "getElem" => {
                                 match &evaluated_args[..] {
                                     [EvalResult::Str(s), EvalResult::Integer(i)] => {
-                                        Some((EvalResult::Char(s.chars().nth(*i as usize)?), false))
+                                        Ok(EvalResult::Char(s.chars().nth(*i as usize).ok_or(EvalSignal::RuntimeError)?))
                                     }
                                     _ => unreachable!("impossible (TC)")
                                 }
@@ -177,7 +177,7 @@ impl Evaluate<Expr> for Context {
                                 match &evaluated_args[..] {
                                     [EvalResult::Str(s1), EvalResult::Str(s2)] => {
                                         let t = format!("{}{}", s1, s2);
-                                        Some((EvalResult::Str(t), false))
+                                        Ok(EvalResult::Str(t))
                                     }
                                     _ => unreachable!("impossible (TC)")
                                 }
@@ -185,7 +185,7 @@ impl Evaluate<Expr> for Context {
                             "strOfChar" => {
                                 match &evaluated_args[..] {
                                     [EvalResult::Char(c)] => {
-                                        Some((EvalResult::Str(String::from(*c)), false))
+                                        Ok(EvalResult::Str(String::from(*c)))
                                     }
                                     _ => unreachable!("impossible (TC)")
                                 }
@@ -198,124 +198,104 @@ impl Evaluate<Expr> for Context {
                                             let id = params[i].0.clone();
                                             cur_bindings.push((id, arg));
                                         }
-                                        let (val, _) = self.scope_eval(cur_bindings, &body)?;
-                                        // Here is the limit of propagation for the return flag
-                                        Some((val, false))
+                                        match self.scope_eval(cur_bindings, &body) {
+                                            Err(EvalSignal::EarlyReturn(val)) => Ok(val),
+                                            result => result
+                                        }
                                     },
-                                    _ => None
+                                    _ => Err(EvalSignal::RuntimeError)
                                 }
                             }
                         }
                     }
-                    _ => None
+                    _ => Err(EvalSignal::RuntimeError)
                 }
             },
             Expr::IndexedAccess(arr, idx) => {
                 match self.eval(&**arr)? {
-                    (val, true) => Some((val, true)),
-                    (EvalResult::Str(s), false) => {
+                    EvalResult::Str(s) => {
                         match self.eval(&**idx)? {
-                            (EvalResult::Integer(i), false) => {
+                            EvalResult::Integer(i) => {
                                 if i < 0 || i >= (s.len() as i64) {
-                                    None
+                                    Err(EvalSignal::RuntimeError)
                                 } else {
-                                    Some((EvalResult::Char(s.chars().nth(i as usize)?), false))
+                                    Ok(EvalResult::Char(s.chars().nth(i as usize).ok_or(EvalSignal::RuntimeError)?))
                                 }
                             }
-                            _ => None,
+                            _ => Err(EvalSignal::RuntimeError),
                         }
                     }
-                    _ => None
+                    _ => Err(EvalSignal::RuntimeError)
                 }
             }
             Expr::PrefixOp(PrefixOperator::Bang, b_) => {
                 match self.eval(&**b_)? {
-                    (val, true)                     => return Some((val, true)),
-                    (EvalResult::Boolean(b), false) => Some((EvalResult::Boolean(!b), false)),
-                    _ => None,
+                    EvalResult::Boolean(b) => Ok(EvalResult::Boolean(!b)),
+                    _ => Err(EvalSignal::RuntimeError),
                 }
             },
             Expr::PrefixOp(PrefixOperator::Minus, n_) => {
                 match self.eval(&**n_)? {
-                    (val, true)                     => return Some((val, true)),
-                    (EvalResult::Integer(n), false) => Some((EvalResult::Integer(-n), false)),
-                    _ => None,
+                    EvalResult::Integer(n) => Ok(EvalResult::Integer(-n)),
+                    _ => Err(EvalSignal::RuntimeError),
                 }
             },
             Expr::InfixOp(InfixOperator::Plus, n_, m_) => {
                 match (self.eval(&**n_)?, self.eval(&**m_)?) {
-                    ((val, true), _) => Some((val, true)),
-                    (_, (val, true)) => Some((val, true)),
-                    ((EvalResult::Integer(n), _), (EvalResult::Integer(m), _)) => Some((EvalResult::Integer(n + m), false)),
-                    _ => None,
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Ok(EvalResult::Integer(n + m)),
+                    _ => Err(EvalSignal::RuntimeError),
                 }
             },
             Expr::InfixOp(InfixOperator::Minus, n_, m_) => {
                 match (self.eval(&**n_)?, self.eval(&**m_)?) {
-                    ((val, true), _) => Some((val, true)),
-                    (_, (val, true)) => Some((val, true)),
-                    ((EvalResult::Integer(n), _), (EvalResult::Integer(m), _)) => Some((EvalResult::Integer(n - m), false)),
-                    _ => None,
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Ok(EvalResult::Integer(n - m)),
+                    _ => Err(EvalSignal::RuntimeError),
                 }
             },
             Expr::InfixOp(InfixOperator::Mult, n_, m_) => {
                 match (self.eval(&**n_)?, self.eval(&**m_)?) {
-                    ((val, true), _) => Some((val, true)),
-                    (_, (val, true)) => Some((val, true)),
-                    ((EvalResult::Integer(n), _), (EvalResult::Integer(m), _)) => Some((EvalResult::Integer(n * m), false)),
-                    _ => None,
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Ok(EvalResult::Integer(n * m)),
+                    _ => Err(EvalSignal::RuntimeError),
                 }
             },
             Expr::InfixOp(InfixOperator::Div, n_, m_) => {
                 match (self.eval(&**n_)?, self.eval(&**m_)?) {
-                    ((val, true), _) => Some((val, true)),
-                    (_, (val, true)) => Some((val, true)),
-                    ((EvalResult::Integer(n), _), (EvalResult::Integer(m), _)) => Some((EvalResult::Integer(n / m), false)),
-                    _ => None,
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Ok(EvalResult::Integer(n / m)),
+                    _ => Err(EvalSignal::RuntimeError),
                 }
             },
             Expr::InfixOp(InfixOperator::Mod, n_, m_) => {
                 match (self.eval(&**n_)?, self.eval(&**m_)?) {
-                    ((val, true), _) => Some((val, true)),
-                    (_, (val, true)) => Some((val, true)),
-                    ((EvalResult::Integer(n), _), (EvalResult::Integer(m), _)) => Some((EvalResult::Integer(n % m), false)),
-                    _ => None,
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Ok(EvalResult::Integer(n % m)),
+                    _ => Err(EvalSignal::RuntimeError),
                 }
             },
             Expr::InfixOp(InfixOperator::LT, n_, m_) => {
                 match (self.eval(&**n_)?, self.eval(&**m_)?) {
-                    ((val, true), _) => Some((val, true)),
-                    (_, (val, true)) => Some((val, true)),
-                    ((EvalResult::Integer(n), _), (EvalResult::Integer(m), _)) => Some((EvalResult::Boolean(n < m), false)),
-                    _ => None,
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Ok(EvalResult::Boolean(n < m)),
+                    _ => Err(EvalSignal::RuntimeError),
                 }
             },
             Expr::InfixOp(InfixOperator::GT, n_, m_) => {
                 match (self.eval(&**n_)?, self.eval(&**m_)?) {
-                    ((val, true), _) => Some((val, true)),
-                    (_, (val, true)) => Some((val, true)),
-                    ((EvalResult::Integer(n), _), (EvalResult::Integer(m), _)) => Some((EvalResult::Boolean(n > m), false)),
-                    _ => None,
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Ok(EvalResult::Boolean(n > m)),
+                    _ => Err(EvalSignal::RuntimeError),
                 }
             },
             Expr::InfixOp(InfixOperator::Eq, n_, m_) => {
                 match (self.eval(&**n_)?, self.eval(&**m_)?) {
-                    ((val, true), _) => Some((val, true)),
-                    (_, (val, true)) => Some((val, true)),
-                    ((EvalResult::Integer(n), _), (EvalResult::Integer(m), _)) => Some((EvalResult::Boolean(n == m), false)),
-                    ((EvalResult::Boolean(n), _), (EvalResult::Boolean(m), _)) => Some((EvalResult::Boolean(n == m), false)),
-                    ((EvalResult::Char(n), _),    (EvalResult::Char(m), _))    => Some((EvalResult::Boolean(n == m), false)),
-                    _ => None,
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Ok(EvalResult::Boolean(n == m)),
+                    (EvalResult::Boolean(n), EvalResult::Boolean(m)) => Ok(EvalResult::Boolean(n == m)),
+                    (EvalResult::Char(n),    EvalResult::Char(m))    => Ok(EvalResult::Boolean(n == m)),
+                    _ => Err(EvalSignal::RuntimeError),
                 }
             },
             Expr::InfixOp(InfixOperator::Neq, n_, m_) => {
                 match (self.eval(&**n_)?, self.eval(&**m_)?) {
-                    ((val, true), _) => Some((val, true)),
-                    (_, (val, true)) => Some((val, true)),
-                    ((EvalResult::Integer(n), _), (EvalResult::Integer(m), _)) => Some((EvalResult::Boolean(n != m), false)),
-                    ((EvalResult::Boolean(n), _), (EvalResult::Boolean(m), _)) => Some((EvalResult::Boolean(n != m), false)),
-                    ((EvalResult::Char(n), _),    (EvalResult::Char(m), _))    => Some((EvalResult::Boolean(n != m), false)),
-                    _ => None,
+                    (EvalResult::Integer(n), EvalResult::Integer(m)) => Ok(EvalResult::Boolean(n != m)),
+                    (EvalResult::Boolean(n), EvalResult::Boolean(m)) => Ok(EvalResult::Boolean(n != m)),
+                    (EvalResult::Char(n),    EvalResult::Char(m))    => Ok(EvalResult::Boolean(n != m)),
+                    _ => Err(EvalSignal::RuntimeError),
                 }
             },
         }
@@ -323,7 +303,7 @@ impl Evaluate<Expr> for Context {
 }
 
 impl Evaluate<Block> for Context {
-    fn eval(&mut self, b: &Block) -> Option<(EvalResult, bool)> {
+    fn eval(&mut self, b: &Block) -> Result<EvalResult, EvalSignal> {
         self.scope_eval(vec![], b)
     }
 }
