@@ -1,4 +1,5 @@
 use std::fmt;
+use crate::mods::lib::utils::BuiltinSymbol;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Type {
@@ -7,7 +8,7 @@ pub enum Type {
     Unit,
     Char,
     Str,
-    Arrow(Box<Type>, Box<Type>)
+    Arrow(Box<Type>, Box<Type>),
 }
 
 impl fmt::Display for Type {
@@ -129,6 +130,28 @@ impl fmt::Display for Expr {
             IndexedAccess(arr, idx)   => write!(f, "{}[{}]", arr, idx),
             PrefixOp(op, arg)         => write!(f, "({}{})", op, arg),
             InfixOp(op, lhs, rhs)     => write!(f, "({} {} {})", lhs, op, rhs)
+        }
+    }
+}
+
+impl Expr {
+    pub fn to_ident(&self) -> Option<&str> {
+        match self {
+            Expr::Ident(i) => Some(i),
+            _ => None,
+        }
+    }
+
+    pub fn to_builtin(&self) -> Option<BuiltinSymbol> {
+        match self.to_ident()? {
+            "print"     => Some(BuiltinSymbol::Print),
+            "len"       => Some(BuiltinSymbol::Len),
+            "getElem"   => Some(BuiltinSymbol::GetElem),
+            "strOfChar" => Some(BuiltinSymbol::StrOfChar),
+            "concat"    => Some(BuiltinSymbol::Concat),
+            "getSlice"  => Some(BuiltinSymbol::GetSlice),
+            "read"      => Some(BuiltinSymbol::Read),
+            _ => None,
         }
     }
 }

@@ -1,4 +1,32 @@
-pub static RESERVED_WORDS : [&str; 17] =
+use std::fmt;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum BuiltinSymbol {
+    Print,
+    Read,
+    Len,
+    StrOfChar,
+    Concat,
+    GetElem,
+    GetSlice,
+}
+
+impl fmt::Display for BuiltinSymbol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_> ) -> fmt::Result {
+        let s = match self {
+            BuiltinSymbol::Print     => "print",
+            BuiltinSymbol::Read      => "read",
+            BuiltinSymbol::Len       => "len",
+            BuiltinSymbol::StrOfChar => "strOfChar",
+            BuiltinSymbol::Concat    => "concat",
+            BuiltinSymbol::GetElem   => "getElem",
+            BuiltinSymbol::GetSlice  => "getSlice",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+pub static RESERVED_WORDS : [&str; 18] =
   [ "len"
   , "print"
   , "read"
@@ -13,6 +41,7 @@ pub static RESERVED_WORDS : [&str; 17] =
   , "bool"
   , "char"
   , "string"
+  , "strOfChar"
   , "unit"
   , "uu"
   , "getSlice"

@@ -1,4 +1,5 @@
 use crate::mods::lib::expr::*;
+use crate::mods::lib::utils::BuiltinSymbol;
 
 use std::collections::HashMap;
 
@@ -12,6 +13,7 @@ pub enum EvalResult {
     Unit,
     #[allow(dead_code)] // We keep the types for pretty printing
     Lambda(Vec<(Id, Type)>, Type, Block),
+    Builtin(BuiltinSymbol),
 }
 
 pub enum EvalSignal {
@@ -98,6 +100,9 @@ impl Evaluate<Expr> for Context {
             Expr::Str(s)     => Ok(EvalResult::Str(s.clone())),
             Expr::Unit       => Ok(EvalResult::Unit),
             Expr::Ident(id) => {
+                if let Some(b) = expr.to_builtin() {
+                    return Ok(EvalResult::Builtin(b))
+                }
                 let val = self.lookup(id).ok_or(EvalSignal::RuntimeError)?;
                 return Ok(val);
             }
@@ -115,8 +120,9 @@ impl Evaluate<Expr> for Context {
             Expr::Lambda(params, ret, body) => Ok(EvalResult::Lambda(params.clone(), ret.clone(), body.clone())),
             Expr::Call(caller, args) => {
                 let evaluated_args = args.iter().map(|arg| self.eval(arg)).collect::<Result<Vec<_>, _>>()?;
-                match &**caller {
-                    Expr::Lambda(params, _, body) => {
+                let evaluated_caller = self.eval(&**caller)?;
+                match evaluated_caller {
+                    EvalResult::Lambda(params, _, body) => {
                         // TODO: abstract this code
                         // NOTE: `caller` is already there
                         // NOTE: No need to check arity since we already type checked
@@ -126,17 +132,17 @@ impl Evaluate<Expr> for Context {
                             cur_bindings.push((id, arg));
                         }
                         // Here is the limit of propagation for the return flag
-                        match self.scope_eval(cur_bindings, body) {
+                        match self.scope_eval(cur_bindings, &body) {
                             Err(EvalSignal::EarlyReturn(val)) => Ok(val),
                             result => result,
                         }
                     }
-                    Expr::Ident(caller) => {
-                        match &caller[..] {
+                    EvalResult::Builtin(builtin) => {
+                        match builtin {
                             // NOTE: the correctness of the compiler relies on the fact that
                             // this internal implementation returns the correct type; this
                             // is not guaranteed by the type checker.
-                            "print" => {
+                            BuiltinSymbol::Print => {
                                 match &evaluated_args[..] {
                                     [EvalResult::Str(s)] => {
                                         print!("{}", s);
@@ -145,18 +151,18 @@ impl Evaluate<Expr> for Context {
                                     _ => unreachable!("impossible (TC)")
                                 }
                             },
-                            "read" => {
+                            BuiltinSymbol::Read => {
                                 let mut s = String::new();
                                 std::io::stdin().read_line(&mut s).unwrap();
                                 Ok(EvalResult::Str(s))
                             }
-                            "len" => {
+                            BuiltinSymbol::Len => {
                                 match &evaluated_args[..] {
                                     [EvalResult::Str(s)] => Ok(EvalResult::Integer(s.len() as i64)),
                                     _ => unreachable!("impossible (TC)")
                                 }
                             }
-                            "getSlice" => {
+                            BuiltinSymbol::GetSlice => {
                                 match &evaluated_args[..] {
                                     [EvalResult::Str(s), EvalResult::Integer(i), EvalResult::Integer(j)] => {
                                         let t = String::from(&s[(*i as usize)..(*j as usize)]);
@@ -165,7 +171,7 @@ impl Evaluate<Expr> for Context {
                                     _ => unreachable!("impossible (TC)")
                                 }
                             }
-                            "getElem" => {
+                            BuiltinSymbol::GetElem => {
                                 match &evaluated_args[..] {
                                     [EvalResult::Str(s), EvalResult::Integer(i)] => {
                                         Ok(EvalResult::Char(s.chars().nth(*i as usize).ok_or(EvalSignal::RuntimeError)?))
@@ -173,7 +179,7 @@ impl Evaluate<Expr> for Context {
                                     _ => unreachable!("impossible (TC)")
                                 }
                             }
-                            "concat" => {
+                            BuiltinSymbol::Concat => {
                                 match &evaluated_args[..] {
                                     [EvalResult::Str(s1), EvalResult::Str(s2)] => {
                                         let t = format!("{}{}", s1, s2);
@@ -182,28 +188,12 @@ impl Evaluate<Expr> for Context {
                                     _ => unreachable!("impossible (TC)")
                                 }
                             }
-                            "strOfChar" => {
+                            BuiltinSymbol::StrOfChar => {
                                 match &evaluated_args[..] {
                                     [EvalResult::Char(c)] => {
                                         Ok(EvalResult::Str(String::from(*c)))
                                     }
                                     _ => unreachable!("impossible (TC)")
-                                }
-                            }
-                            _ => {
-                                match self.lookup(caller) {
-                                    Some(EvalResult::Lambda(params, _, body)) => {
-                                        let mut cur_bindings = vec![];
-                                        for (i, arg) in evaluated_args.into_iter().enumerate() {
-                                            let id = params[i].0.clone();
-                                            cur_bindings.push((id, arg));
-                                        }
-                                        match self.scope_eval(cur_bindings, &body) {
-                                            Err(EvalSignal::EarlyReturn(val)) => Ok(val),
-                                            result => result
-                                        }
-                                    },
-                                    _ => Err(EvalSignal::RuntimeError)
                                 }
                             }
                         }
