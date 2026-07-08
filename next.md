@@ -1,3 +1,2 @@
 - Lexical scoping vs dynamic scoping
-- typing early return
 - importing files
