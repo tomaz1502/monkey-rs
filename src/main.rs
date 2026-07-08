@@ -1,25 +1,13 @@
 use std::env;
-use std::fs;
 use std::io;
-use std::path::Path;
 use io::{Write, BufRead};
 
-use mods::lib::parser;
-use mods::lib::type_checker;
-use mods::lib::type_checker::TypeCheck;
-use mods::lib::evaluator;
-use mods::lib::evaluator::Evaluate;
-
-mod mods;
-
-fn get_text(file_path: &str) -> Result<String, String> {
-    if Path::new(file_path).exists() {
-        fs::read_to_string(file_path).map_err(|e| e.to_string())
-    } else {
-        let err_msg = std::format!("File does not exist: {}", file_path);
-        Err(err_msg)
-    }
-}
+use monkey::utils::*;
+use monkey::type_checker;
+use monkey::type_checker::TypeCheck;
+use monkey::evaluator;
+use monkey::evaluator::Evaluate;
+use monkey::parser;
 
 fn process(text: String,
            tc_ctx: &mut type_checker::Context,

@@ -1,5 +1,5 @@
 use std::fmt;
-use crate::mods::lib::utils::BuiltinSymbol;
+use crate::utils::BuiltinSymbol;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Type {
@@ -30,6 +30,7 @@ pub type Id = String;
 pub enum Stmt {
     Let(Id, Expr),
     Return(Expr),
+    Load(String),
     Expr(Expr),
     Block(Block)
 }
@@ -41,6 +42,7 @@ impl fmt::Display for Stmt {
             Let(id, e) => write!(f, "let {} = {};", id, e),
             Return(e)  => write!(f, "return {};", e),
             Expr(e)    => write!(f, "{}", e),
+            Load(p)    => write!(f, "load {};", p),
             Block(b)   => write!(f, "{}", b),
         }
     }

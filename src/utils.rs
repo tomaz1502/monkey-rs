@@ -1,4 +1,6 @@
 use std::fmt;
+use std::fs;
+use std::path::Path;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum BuiltinSymbol {
@@ -72,3 +74,13 @@ pub fn unescape(input: &str) -> String {
 
     out
 }
+
+pub fn get_text(file_path: &str) -> Result<String, String> {
+    if Path::new(file_path).exists() {
+        fs::read_to_string(file_path).map_err(|e| e.to_string())
+    } else {
+        let err_msg = std::format!("File does not exist: {}", file_path);
+        Err(err_msg)
+    }
+}
+

@@ -38,5 +38,8 @@ let strOfInt =
         };
     };
 
-print(strOfInt(-128));
-print("\n");
+let println =
+    fn (s : string) -> unit {
+        print(s);
+        print("\n");
+    };

@@ -1,4 +1,4 @@
-use crate::mods::lib::utils::unescape;
+use crate::utils::unescape;
 
 #[derive(Debug, Clone, PartialEq)]
 #[repr(u8)]
@@ -42,6 +42,7 @@ pub enum Token {
     Else,
     True,
     False,
+    Load,
 
     // Types
     IntType,
@@ -239,6 +240,7 @@ impl Lexer {
                     "true"   => Ok(True),
                     "false"  => Ok(False),
                     "return" => Ok(Return),
+                    "load"   => Ok(Load),
                     "if"     => Ok(If),
                     "else"   => Ok(Else),
                     "int"    => Ok(IntType),

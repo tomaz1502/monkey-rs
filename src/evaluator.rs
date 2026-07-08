@@ -1,5 +1,6 @@
-use crate::mods::lib::expr::*;
-use crate::mods::lib::utils::BuiltinSymbol;
+use crate::expr::*;
+use crate::utils::{ BuiltinSymbol, get_text };
+use crate::parser;
 
 use std::collections::HashMap;
 
@@ -71,16 +72,28 @@ impl Evaluate<Stmt> for Context {
         match stmt {
             Stmt::Let(id, expr) => {
                 let res = self.eval(expr)?;
-                self
-                  .bindings_stack
-                  .last_mut()
-                  .expect("let without a context")
-                  .insert(id.clone(), res);
+                let ctx =
+                    self.bindings_stack
+                        .last_mut()
+                        .unwrap();
+                if ctx.contains_key(id) {
+                    return Err(EvalSignal::RuntimeError);
+                }
+                ctx.insert(id.clone(), res);
                 Ok(EvalResult::Unit)
             }
             Stmt::Return(expr)  => {
                 let val = self.eval(expr)?;
                 return Err(EvalSignal::EarlyReturn(val));
+            }
+            // Adds only the top level `let` declarations to scope
+            Stmt::Load(path)    => {
+                let source_code = get_text(path).map_err(|_| EvalSignal::RuntimeError)?;
+                let prog = parser::Parser::parse(source_code).map_err(|_| EvalSignal::RuntimeError)?;
+                for stmt in prog.stmts {
+                    self.eval(&stmt)?;
+                }
+                Ok(EvalResult::Unit)
             }
             Stmt::Expr(expr)    => self.eval(expr),
             Stmt::Block(block)  => {

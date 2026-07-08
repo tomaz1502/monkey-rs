@@ -10,6 +10,7 @@ stmt_content ::=
       <expr>
     | "let" <name> = <expr>
     | "return" <expr>
+    | "load" <path>
     | <block>
 
 expr ::=
@@ -53,9 +54,9 @@ infix_op ::=
 */
 
 
-use crate::mods::lib::lexer;
-use crate::mods::lib::expr::*;
-use crate::mods::lib::utils::RESERVED_WORDS;
+use crate::lexer;
+use crate::expr::*;
+use crate::utils::RESERVED_WORDS;
 
 use lexer::Token::*;
 use lexer::{ LexError, LexErrorKind };
@@ -501,6 +502,15 @@ impl Parser {
         Ok(Stmt::Let(id, expr))
     }
 
+    fn parse_load(&mut self) -> Result<Stmt, ParseError> {
+        self.advance_token()?;
+        if let Expr::Str(path) = self.parse_string()? {
+            Ok(Stmt::Load(path))
+        } else {
+            unreachable!()
+        }
+    }
+
     fn parse_return(&mut self) -> Result<Stmt, ParseError> {
         self.advance_token()?;
         let expr = self.parse_expr()?;
@@ -511,6 +521,7 @@ impl Parser {
         let stmt = match self.curr_token {
             Let => self.parse_let()?,
             Return => self.parse_return()?,
+            Load   => self.parse_load()?,
             LBrack => {
                 let block = self.parse_block()?;
                 Stmt::Block(block)

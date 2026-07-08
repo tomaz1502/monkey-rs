@@ -1,10 +1,13 @@
 // TODO: implement tests, specially testing the scopes
-use crate::mods::lib::expr::*;
+use crate::expr::*;
+use crate::parser;
+use crate::utils::get_text;
 
 use std::collections::HashMap;
 
 static EQUALITY_TYPES: [Type; 3] = [Type::Integer, Type::Boolean, Type::Char];
 
+#[derive(Debug)]
 pub struct Context {
     bindings_stack: Vec<HashMap<Id, Type>>,
     // NOTE: I wish this was static and shared with the evaluator, but
@@ -102,6 +105,14 @@ impl TypeCheck<Stmt> for Context {
             }
             Stmt::Expr(expr) => self.tc(expr),
             Stmt::Return(expr) => self.tc(expr),
+            Stmt::Load(path)      => {
+                let source_code = get_text(path).ok()?;
+                let prog = parser::Parser::parse(source_code).ok()?;
+                for stmt in prog.stmts {
+                    self.tc(&stmt)?;
+                }
+                Some(Type::Unit)
+            }
             Stmt::Block(block) => self.scope_tc(vec![], block),
         }
     }
@@ -246,9 +257,4 @@ impl TypeCheck<Block> for Context {
     fn tc(&mut self, b: &Block) -> Option<Type> {
         self.scope_tc(vec![], b)
     }
-}
-
-#[cfg(test)]
-mod tests {
-    // TODO
 }
