@@ -51,12 +51,12 @@ impl Config  {
     fn build(args: Vec<String>) -> Result<Self, &'static str> {
         let mut cfg = Config { loads: vec![], main: None };
         let mut i = 1;
-        while i < args.len() - 1 {
-            if args[i] == "-l" {
+        while i < args.len() {
+            if args[i] == "-l" && i < args.len() - 1 {
                 cfg.loads.push(args[i + 1].clone());
                 i += 2;
             } else if args[i].starts_with("--load=") {
-                let p = &args[i][6..];
+                let p = &args[i][7..];
                 cfg.loads.push(p.to_string());
                 i += 1;
             } else {
