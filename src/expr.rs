@@ -76,7 +76,7 @@ impl fmt::Display for PrefixOperator {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum InfixOperator { Plus, Minus, Mult, Div, Mod, Eq, Neq, LT, GT }
+pub enum InfixOperator { Plus, Minus, Mult, Div, Mod, Eq, Neq, LT, GT, Or, And }
 
 impl fmt::Display for InfixOperator {
     fn fmt(&self, f: &mut fmt::Formatter<'_> ) -> fmt::Result {
@@ -91,6 +91,8 @@ impl fmt::Display for InfixOperator {
             Neq   => write!(f, "!="),
             LT    => write!(f, "<"),
             GT    => write!(f, ">"),
+            Or    => write!(f, "||"),
+            And   => write!(f, "&&"),
         }
     }
 }

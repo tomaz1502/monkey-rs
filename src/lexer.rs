@@ -33,6 +33,8 @@ pub enum Token {
     GT,
     Eq,
     Neq,
+    Or,
+    And,
 
     // Keywords
     Let,
@@ -258,6 +260,22 @@ impl Lexer {
                 match num_str.parse::<i64>() {
                     Ok(num) => Ok(IntLit(num)),
                     Err(_) => Err(self.mk_error(UnrecognizedToken)) // TODO: Create a token error for this
+                }
+            }
+            '|' => {
+                if self.peek() == Some('|') {
+                    self.read_char();
+                    Ok(Or)
+                } else {
+                    Err(self.mk_error(UnrecognizedToken))
+                }
+            }
+            '&' => {
+                if self.peek() == Some('&') {
+                    self.read_char();
+                    Ok(And)
+                } else {
+                    Err(self.mk_error(UnrecognizedToken))
                 }
             }
             _ => Err(self.mk_error(UnrecognizedToken)),

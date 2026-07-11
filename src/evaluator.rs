@@ -167,6 +167,7 @@ impl Evaluate<Expr> for Context {
                             BuiltinSymbol::Read => {
                                 let mut s = String::new();
                                 std::io::stdin().read_line(&mut s).unwrap();
+                                s = s[0 .. s.len()-1].to_string(); // drop newline
                                 Ok(EvalResult::Str(s))
                             }
                             BuiltinSymbol::Len => {
@@ -290,6 +291,7 @@ impl Evaluate<Expr> for Context {
                     (EvalResult::Integer(n), EvalResult::Integer(m)) => Ok(EvalResult::Boolean(n == m)),
                     (EvalResult::Boolean(n), EvalResult::Boolean(m)) => Ok(EvalResult::Boolean(n == m)),
                     (EvalResult::Char(n),    EvalResult::Char(m))    => Ok(EvalResult::Boolean(n == m)),
+                    (EvalResult::Str(n),     EvalResult::Str(m))     => Ok(EvalResult::Boolean(n == m)),
                     _ => Err(EvalSignal::RuntimeError),
                 }
             },
@@ -298,6 +300,18 @@ impl Evaluate<Expr> for Context {
                     (EvalResult::Integer(n), EvalResult::Integer(m)) => Ok(EvalResult::Boolean(n != m)),
                     (EvalResult::Boolean(n), EvalResult::Boolean(m)) => Ok(EvalResult::Boolean(n != m)),
                     (EvalResult::Char(n),    EvalResult::Char(m))    => Ok(EvalResult::Boolean(n != m)),
+                    _ => Err(EvalSignal::RuntimeError),
+                }
+            },
+            Expr::InfixOp(InfixOperator::Or, b1_, b2_) => {
+                match (self.eval(&**b1_)?, self.eval(&**b2_)?) {
+                    (EvalResult::Boolean(b1), EvalResult::Boolean(b2)) => Ok(EvalResult::Boolean(b1 || b2)),
+                    _ => Err(EvalSignal::RuntimeError),
+                }
+            },
+            Expr::InfixOp(InfixOperator::And, b1_, b2_) => {
+                match (self.eval(&**b1_)?, self.eval(&**b2_)?) {
+                    (EvalResult::Boolean(b1), EvalResult::Boolean(b2)) => Ok(EvalResult::Boolean(b1 && b2)),
                     _ => Err(EvalSignal::RuntimeError),
                 }
             },

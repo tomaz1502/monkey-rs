@@ -50,9 +50,8 @@ prefix_op ::=
     "-" | "!"
 
 infix_op ::=
-    "+" | "-" | "*" | "/" | "%" | "=" | "!=" | "<" | ">"
+    "+" | "-" | "*" | "/" | "%" | "=" | "!=" | "<" | ">" | "||" | "&&"
 */
-
 
 use crate::lexer;
 use crate::expr::*;
@@ -77,6 +76,8 @@ impl PrefixOperator {
 impl InfixOperator {
     fn from_curr_tok(parser: &Parser) -> Result<Self, ParseError> {
         match &parser.curr_token {
+            lexer::Token::And     => Ok(InfixOperator::And),
+            lexer::Token::Or      => Ok(InfixOperator::Or),
             lexer::Token::Plus    => Ok(InfixOperator::Plus),
             lexer::Token::Minus   => Ok(InfixOperator::Minus),
             lexer::Token::Mult    => Ok(InfixOperator::Mult),
@@ -97,6 +98,7 @@ impl InfixOperator {
 #[derive(PartialEq, Eq, PartialOrd)]
 enum Precedence {
     Lowest,
+    Logical,
     Equals,
     LessGreater,
     Sum,
@@ -108,17 +110,19 @@ enum Precedence {
 impl lexer::Token {
     fn prec(&self) -> Precedence {
         match self {
-            Eq       => Precedence::Equals,
-            Neq      => Precedence::Equals,
-            LT       => Precedence::LessGreater,
-            GT       => Precedence::LessGreater,
-            Plus     => Precedence::Sum,
-            Minus    => Precedence::Sum,
+            LPar     => Precedence::Call,
+            LSqBrack => Precedence::Call,
             Mult     => Precedence::Product,
             Slash    => Precedence::Product,
             Modulus  => Precedence::Product,
-            LPar     => Precedence::Call,
-            LSqBrack => Precedence::Call,
+            Plus     => Precedence::Sum,
+            Minus    => Precedence::Sum,
+            LT       => Precedence::LessGreater,
+            GT       => Precedence::LessGreater,
+            Eq       => Precedence::Equals,
+            Neq      => Precedence::Equals,
+            And      => Precedence::Logical,
+            Or       => Precedence::Logical,
             _        => Precedence::Lowest
         }
     }
@@ -199,6 +203,7 @@ impl From<LexError> for ParseError {
 pub struct Parser {
     curr_token: lexer::Token,
     lexer: lexer::Lexer,
+    nxt_anon: u32,
 }
 
 // Invariant: All functions prefixed with `parse` always leave the curr_token as the first
@@ -207,7 +212,7 @@ impl Parser {
     fn new(source_code: String) -> Result<Self, ParseError> {
         let mut lexer = lexer::Lexer::new(source_code);
         let curr_token = lexer.get_next_token()?;
-        let parser = Parser { curr_token, lexer };
+        let parser = Parser { curr_token, lexer, nxt_anon: 0 };
         Ok(parser)
     }
 
@@ -337,6 +342,12 @@ impl Parser {
             } else {
                 break;
             }
+        }
+        if params.is_empty() {
+            // TODO: Real anonymous identifier
+            let anon_id = "__an".to_string() + &self.nxt_anon.to_string();
+            self.nxt_anon += 1;
+            params.push((anon_id, Type::Unit));
         }
         self.expect_token(RPar)?;
         self.advance_token()?;
@@ -469,7 +480,8 @@ impl Parser {
             left_expr = match self.curr_token {
                 Plus    | Minus   | Mult    | Slash   |
                 Modulus | LT      | GT      | Eq      |
-                Neq      => self.parse_infix_op(left_expr)?,
+                Neq     | Or      | And =>
+                  self.parse_infix_op(left_expr)?,
                 LPar     => self.parse_call(left_expr)?,
                 LSqBrack => self.parse_indexed_access(left_expr)?,
                 _ => break,

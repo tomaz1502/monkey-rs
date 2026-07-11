@@ -5,7 +5,7 @@ use crate::utils::get_text;
 
 use std::collections::HashMap;
 
-static EQUALITY_TYPES: [Type; 3] = [Type::Integer, Type::Boolean, Type::Char];
+static EQUALITY_TYPES: [Type; 4] = [Type::Integer, Type::Boolean, Type::Char, Type::Str];
 
 #[derive(Debug)]
 pub struct Context {
@@ -119,20 +119,12 @@ impl TypeCheck<Stmt> for Context {
 }
 
 impl Expr {
-    fn build_arrow_aux(params: &[(Id, Type)], codom : &Type) -> Type {
+    fn build_arrow(params: &[(Id, Type)], codom : &Type) -> Type {
         match params {
             [] => codom.clone(),
             [prv_types @ .., last_type] => {
-                Self::build_arrow_aux(prv_types, &Type::Arrow(Box::new(last_type.1.clone()), Box::new(codom.clone())))
+                Self::build_arrow(prv_types, &Type::Arrow(Box::new(last_type.1.clone()), Box::new(codom.clone())))
             }
-        }
-    }
-
-    fn build_arrow(params: &[(Id, Type)], codom : &Type) -> Type {
-        if params.is_empty() { // create a thunk
-            Type::Arrow(Box::new(Type::Unit), Box::new(codom.clone()))
-        } else {
-            Self::build_arrow_aux(params, codom)
         }
     }
 
@@ -244,6 +236,16 @@ impl TypeCheck<Expr> for Context {
                 let te1 = self.tc(&**e1)?;
                 let te2 = self.tc(&**e2)?;
                 if te1 == te2 && te1 == Type::Integer {
+                    Some(Type::Boolean)
+                } else {
+                    None
+                }
+            }
+            Expr::InfixOp(InfixOperator::Or, e1, e2) |
+            Expr::InfixOp(InfixOperator::And, e1, e2) => {
+                let te1 = self.tc(&**e1)?;
+                let te2 = self.tc(&**e2)?;
+                if te1 == te2 && te1 == Type::Boolean {
                     Some(Type::Boolean)
                 } else {
                     None
